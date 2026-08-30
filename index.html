@@ -3,16 +3,2187 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sleepy Sneezes — Arcade</title>
-    <link rel="stylesheet" href="css/arcade.css">
+    <title>SleepySneezes - 16-Bit Edition</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: #030611;
+            color: #f1f5f9;
+            user-select: none;
+            -webkit-user-select: none;
+            overflow: hidden;
+            height: 100%;
+            width: 100%;
+        }
+
+        canvas {
+            display: block;
+            position: fixed;
+            inset: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: contain;
+            object-position: center;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+            image-rendering: pixelated;
+        }
+
+        .scanlines {
+            pointer-events: none;
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                to bottom,
+                rgba(18, 16, 40, 0.0) 0px,
+                rgba(18, 16, 40, 0.0) 2px,
+                rgba(0, 0, 0, 0.11) 2px,
+                rgba(0, 0, 0, 0.11) 3px
+            );
+            mix-blend-mode: multiply;
+            z-index: 5;
+        }
+    </style>
 </head>
 <body>
-    <div id="stage">
-        <canvas id="game" width="800" height="450"></canvas>
-    </div>
-    <div class="crt"></div>
+    <canvas id="gameCanvas" width="400" height="225"></canvas>
     <div class="scanlines"></div>
-    <div class="arcade-label">SLEEPY SNEEZES  ·  1 CREDIT  ·  SHIFT SNEEZE  ·  F DASH</div>
-    <script type="module" src="js/main.js"></script>
+    
+    <script>
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+                this.chargeOsc = null;
+                this.chargeGain = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            playTone(freq, type, duration, startGain = 0.2, endGain = 0.01) {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(startGain, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(endGain, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch (e) {}
+            }
+
+            jumpSound() {
+                this.playTone(350, 'sine', 0.15, 0.25, 0.01);
+            }
+
+            hitSound() {
+                this.playTone(120, 'sawtooth', 0.25, 0.3, 0.01);
+            }
+
+            stompSound() {
+                this.playTone(220, 'square', 0.12, 0.2, 0.01);
+            }
+
+            pillowSound() {
+                if (this.muted || !this.ctx) return;
+                this.playTone(523.25, 'sine', 0.1, 0.2, 0.01);
+                setTimeout(() => this.playTone(659.25, 'sine', 0.15, 0.2, 0.01), 80);
+            }
+
+            startChargeSound() {
+                if (this.muted || !this.ctx || this.chargeOsc) return;
+                try {
+                    this.chargeOsc = this.ctx.createOscillator();
+                    this.chargeGain = this.ctx.createGain();
+                    this.chargeOsc.type = 'triangle';
+                    this.chargeOsc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                    this.chargeOsc.frequency.exponentialRampToValueAtTime(600, this.ctx.currentTime + 1.2);
+                    this.chargeGain.gain.setValueAtTime(0.05, this.ctx.currentTime);
+                    this.chargeGain.gain.linearRampToValueAtTime(0.2, this.ctx.currentTime + 1.2);
+                    this.chargeOsc.connect(this.chargeGain);
+                    this.chargeGain.connect(this.ctx.destination);
+                    this.chargeOsc.start();
+                } catch (e) {}
+            }
+
+            stopChargeSound() {
+                if (this.chargeOsc) {
+                    try {
+                        this.chargeOsc.stop();
+                        this.chargeOsc.disconnect();
+                    } catch (e) {}
+                    this.chargeOsc = null;
+                    this.chargeGain = null;
+                }
+            }
+
+            dashSound() {
+                this.playTone(180, 'square', 0.08, 0.18, 0.01);
+                setTimeout(() => this.playTone(420, 'sawtooth', 0.12, 0.22, 0.01), 40);
+            }
+
+            executeSound() {
+                if (this.muted || !this.ctx) return;
+                try {
+                    this.playTone(80, 'sawtooth', 0.4, 0.4, 0.01);
+                    setTimeout(() => this.playTone(220, 'square', 0.15, 0.35, 0.01), 80);
+                    setTimeout(() => this.playTone(880, 'triangle', 0.35, 0.28, 0.01), 160);
+                    setTimeout(() => this.playTone(1320, 'sine', 0.5, 0.2, 0.01), 280);
+                } catch (e) {}
+            }
+
+            sneezeSound(power = 1.0) {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const bufferSize = this.ctx.sampleRate * 0.3;
+                    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                    const data = buffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) {
+                        data[i] = Math.random() * 2 - 1;
+                    }
+                    const noise = this.ctx.createBufferSource();
+                    noise.buffer = buffer;
+
+                    const filter = this.ctx.createBiquadFilter();
+                    filter.type = 'bandpass';
+                    filter.frequency.value = 1000 * power;
+
+                    const gain = this.ctx.createGain();
+                    gain.gain.setValueAtTime(0.4 * power, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+
+                    noise.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    noise.start();
+                } catch (e) {
+                    this.playTone(400 * power, 'square', 0.25, 0.3, 0.01);
+                }
+            }
+        }
+
+        let stardustParticles = [];
+        let featherParticles = [];
+
+        for (let i = 0; i < 45; i++) {
+            stardustParticles.push({
+                x: Math.random() * 800,
+                y: Math.random() * 450,
+                size: Math.random() * 2.2 + 0.8,
+                vx: Math.random() * 0.3 + 0.1,
+                vy: (Math.random() - 0.5) * 0.15,
+                alpha: Math.random() * 0.7 + 0.3,
+                pulseSpeed: Math.random() * 0.04 + 0.01
+            });
+        }
+
+        function spawnFeatherBurst(x, y, count = 12) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 3.5 + 1.2;
+                featherParticles.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 1.0,
+                    rotation: Math.random() * Math.PI * 2,
+                    vRot: (Math.random() - 0.5) * 0.2,
+                    scale: Math.random() * 0.6 + 0.5,
+                    life: 45 + Math.random() * 25,
+                    maxLife: 70,
+                    color: Math.random() > 0.3 ? '#e0f2fe' : '#fef08a'
+                });
+            }
+        }
+
+        const sound = new SoundFX();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+
+        const STATE = {
+            START: 'START',
+            PLAYING: 'PLAYING',
+            MODAL: 'MODAL',
+            VICTORY: 'VICTORY'
+        };
+        let currentGameState = STATE.START;
+        let impactFrame = {
+            active: false,
+            timer: 0,
+            duration: 48,
+            px: 0, py: 0, ex: 0, ey: 0,
+            flyX: 0, flyY: 0, flyVX: 0, flyVY: 0,
+            kanji: '斬'
+        };
+        const KANJI_POOL = ['斬', '撃', '滅', '破', '閃', '轟'];
+
+        // Victory animation state
+        let victoryTimer = 0;
+        let victoryPhase = 0; // 0=sneeze charge, 1=impact, 2=cloud spin, 3=star form, 4=THE END
+        let victoryCloud = { x: 400, y: 160, r: 60, spin: 0, scaleX: 1, scaleY: 1, alpha: 1 };
+        let victoryStar = { x: 400, y: 160, r: 0, alpha: 0, spin: 0 };
+        let victoryPlayerX = 200;
+        let victoryShockwaves = [];
+
+        const CANVAS_WIDTH = 800;
+        const CANVAS_HEIGHT = 450;
+
+        let currentLevelIndex = 0;
+        let platforms = [];
+        let pillows = [];
+        let enemies = [];
+        let alarmClocks = [];
+        let hazards = [];
+        let bossProjectiles = [];
+        let particles = [];
+        let shockwaves = [];
+        let floatingTexts = [];
+        let zzzParticles = [];
+        let boss = null;
+        let goalPost = null;
+        let gameTime = 0;
+        let modalData = { title: '', story: '' };
+        let modalActionCallback = null;
+
+        const DEFAULT_THEME = {
+            sky: ['#020510', '#080d21', '#10162e', '#181028'],
+            moon: '#fef08a',
+            starDensity: 40
+        };
+
+        const screenShake = {
+            intensity: 0,
+            x: 0,
+            y: 0,
+            trigger(amount) {
+                this.intensity = Math.max(this.intensity, amount);
+            },
+            update() {
+                if (this.intensity > 0) {
+                    this.x = (Math.random() - 0.5) * this.intensity * 1.5;
+                    this.y = (Math.random() - 0.5) * this.intensity * 1.5;
+                    this.intensity *= 0.88;
+                    if (this.intensity < 0.2) {
+                        this.intensity = 0;
+                        this.x = 0;
+                        this.y = 0;
+                    }
+                }
+            }
+        };
+
+        const levels = [
+            {
+                title: 'Allergy Curse',
+                story: 'Gather Sleepyhead\'s scattered dream pillows! Hold SNEEZE to build up power and launch yourself across wide platforms!',
+                pillowsTotal: 4,
+                theme: DEFAULT_THEME,
+                setup() {
+                    platforms = [
+                        { x: 0, y: 400, w: 800, h: 50, type: 'ground' },
+                        { x: 90, y: 310, w: 160, h: 18, type: 'static' },
+                        { x: 300, y: 250, w: 150, h: 18, type: 'static' },
+                        { x: 500, y: 190, w: 150, h: 18, type: 'static' },
+                        { x: 200, y: 140, w: 140, h: 18, type: 'static' },
+                        { x: 660, y: 300, w: 110, h: 18, type: 'static' }
+                    ];
+                    pillows = [
+                        { x: 150, y: 270, collected: false },
+                        { x: 350, y: 210, collected: false },
+                        { x: 560, y: 150, collected: false },
+                        { x: 250, y: 100, collected: false }
+                    ];
+                    enemies = [
+                        makeEnemy(220, 376, 0.7, 40, 420, 'bunny'),
+                        makeEnemy(540, 166, -0.55, 500, 640, 'slime'),
+                        makeEnemy(700, 276, 0.55, 660, 770, 'fox'),
+                        makeEnemy(430, 100, 0.7, 380, 520, 'moth', { baseY: 100 })
+                    ];
+                    hazards = [
+                        { x: 480, y: 385, w: 70, h: 15, type: 'spikes' }
+                    ];
+                    alarmClocks = [];
+                    boss = null;
+                    goalPost = { x: 720, y: 350, w: 40, h: 50, unlocked: false };
+                }
+            },
+            {
+                title: 'Midnight Winds',
+                story: 'High clouds carry heavy dream currents. Use fully charged Sneezes for massive recoil jumps!',
+                pillowsTotal: 4,
+                theme: {
+                    sky: ['#040616', '#0a1129', '#131a38', '#1c1436'],
+                    moon: '#e0f2fe',
+                    starDensity: 55
+                },
+                setup() {
+                    platforms = [
+                        { x: 0, y: 400, w: 800, h: 50, type: 'ground' },
+                        { x: 180, y: 320, w: 140, h: 18, type: 'static' },
+                        { x: 400, y: 260, w: 140, h: 18, type: 'static' },
+                        { x: 220, y: 180, w: 150, h: 18, type: 'static' },
+                        { x: 40, y: 130, w: 130, h: 18, type: 'static' },
+                        { x: 610, y: 160, w: 150, h: 18, type: 'static' },
+                        { x: 620, y: 320, w: 140, h: 18, type: 'static' }
+                    ];
+                    pillows = [
+                        { x: 230, y: 280, collected: false },
+                        { x: 450, y: 220, collected: false },
+                        { x: 90, y: 90, collected: false },
+                        { x: 670, y: 120, collected: false }
+                    ];
+                    enemies = [
+                        makeEnemy(240, 156, 0.65, 220, 350, 'fox'),
+                        makeEnemy(650, 136, -0.55, 610, 750, 'slime'),
+                        makeEnemy(200, 366, 0.55, 40, 500, 'ogre'),
+                        makeEnemy(300, 100, -0.8, 220, 400, 'bat', { baseY: 100 })
+                    ];
+                    hazards = [
+                        { x: 520, y: 385, w: 80, h: 15, type: 'spikes' },
+                        { x: 650, y: 145, w: 50, h: 15, type: 'spikes' }
+                    ];
+                    alarmClocks = [];
+                    boss = null;
+                    goalPost = { x: 690, y: 330, w: 40, h: 50, unlocked: false };
+                }
+            },
+            {
+                title: 'Pillow Fort Peaks',
+                story: 'Towering cushion stacks line the horizon. Stomp dust bunnies from above or Blast them away with Sneeze! Watch for sky bats and thorny brambles.',
+                pillowsTotal: 4,
+                theme: {
+                    sky: ['#050411', '#0c0a24', '#171034', '#231331'],
+                    moon: '#fbcfe8',
+                    starDensity: 45
+                },
+                setup() {
+                    platforms = [
+                        { x: 0, y: 400, w: 800, h: 50, type: 'ground' },
+                        { x: 160, y: 330, w: 140, h: 18, type: 'static' },
+                        { x: 360, y: 270, w: 150, h: 18, type: 'static' },
+                        { x: 540, y: 210, w: 140, h: 18, type: 'static' },
+                        { x: 360, y: 140, w: 140, h: 18, type: 'static' },
+                        { x: 160, y: 100, w: 140, h: 18, type: 'static' }
+                    ];
+                    pillows = [
+                        { x: 200, y: 290, collected: false },
+                        { x: 590, y: 170, collected: false },
+                        { x: 400, y: 100, collected: false },
+                        { x: 200, y: 60, collected: false }
+                    ];
+                    enemies = [
+                        makeEnemy(80, 362, 0.5, 20, 280, 'scarecrow'),
+                        makeEnemy(230, 306, -0.65, 160, 290, 'slime'),
+                        makeEnemy(400, 104, 0.45, 360, 490, 'ogre'),
+                        makeEnemy(700, 378, -0.9, 520, 780, 'fox'),
+                        makeEnemy(220, 60, 0.9, 160, 300, 'moth', { baseY: 60 }),
+                        makeEnemy(590, 150, -0.85, 540, 680, 'bat', { baseY: 150 })
+                    ];
+                    hazards = [
+                        { x: 300, y: 385, w: 70, h: 15, type: 'spikes' },
+                        { x: 380, y: 125, w: 50, h: 15, type: 'spikes' }
+                    ];
+                    alarmClocks = [];
+                    boss = null;
+                    goalPost = { x: 730, y: 300, w: 40, h: 50, unlocked: false };
+                }
+            },
+            {
+                title: 'Dreamy Nebula',
+                story: 'Shimmering star nebulae fill the sky. Leap across fast-drifting cloud paths, dodge bramble spikes, and retrieve the golden pillows!',
+                pillowsTotal: 4,
+                theme: {
+                    sky: ['#02040c', '#070a1f', '#0e1636', '#1a1042'],
+                    moon: '#c4b5fd',
+                    starDensity: 60
+                },
+                setup() {
+                    platforms = [
+                        { x: 0, y: 400, w: 800, h: 50, type: 'ground' },
+                        { x: 180, y: 320, w: 140, h: 18, type: 'static' },
+                        { x: 360, y: 250, w: 150, h: 18, type: 'static' },
+                        { x: 540, y: 190, w: 150, h: 18, type: 'static' },
+                        { x: 330, y: 130, w: 150, h: 18, type: 'static' },
+                        { x: 80, y: 110, w: 140, h: 18, type: 'static' }
+                    ];
+                    pillows = [
+                        { x: 220, y: 280, collected: false },
+                        { x: 410, y: 210, collected: false },
+                        { x: 380, y: 90, collected: false },
+                        { x: 130, y: 70, collected: false }
+                    ];
+                    enemies = [
+                        makeEnemy(80, 376, 0.7, 20, 360, 'slime'),
+                        makeEnemy(380, 104, 0.55, 330, 470, 'ogre'),
+                        makeEnemy(150, 86, -0.9, 80, 210, 'fox'),
+                        makeEnemy(700, 340, -0.85, 500, 780, 'moth', { baseY: 340 }),
+                        makeEnemy(250, 40, 0.8, 80, 340, 'bat', { baseY: 40 })
+                    ];
+                    hazards = [
+                        { x: 420, y: 385, w: 80, h: 15, type: 'spikes' },
+                        { x: 350, y: 115, w: 60, h: 15, type: 'spikes' }
+                    ];
+                    alarmClocks = [];
+                    boss = null;
+                    goalPost = { x: 710, y: 310, w: 40, h: 50, unlocked: false };
+                }
+            },
+            {
+                title: 'Clockwork Nightmare',
+                story: 'Tick-tock! Ring all the alarm clocks with Sneeze Blasts to clear the allergy storm and open the portal!',
+                pillowsTotal: 4,
+                theme: {
+                    sky: ['#06040f', '#100a26', '#1c1030', '#2a0f2c'],
+                    moon: '#fde68a',
+                    starDensity: 50
+                },
+                setup() {
+                    platforms = [
+                        { x: 0, y: 400, w: 800, h: 50, type: 'ground' },
+                        { x: 200, y: 320, w: 150, h: 18, type: 'static' },
+                        { x: 400, y: 260, w: 150, h: 18, type: 'static' },
+                        { x: 580, y: 190, w: 150, h: 18, type: 'static' },
+                        { x: 360, y: 140, w: 150, h: 18, type: 'static' },
+                        { x: 120, y: 120, w: 150, h: 18, type: 'static' }
+                    ];
+                    pillows = [
+                        { x: 250, y: 280, collected: false },
+                        { x: 450, y: 220, collected: false },
+                        { x: 410, y: 100, collected: false },
+                        { x: 170, y: 80, collected: false }
+                    ];
+                    alarmClocks = [
+                        { x: 260, y: 305, rung: false },
+                        { x: 460, y: 245, rung: false },
+                        { x: 420, y: 125, rung: false }
+                    ];
+                    enemies = [
+                        makeEnemy(80, 376, 0.85, 20, 360, 'ogre'),
+                        makeEnemy(430, 236, -0.75, 400, 540, 'bunny'),
+                        makeEnemy(170, 96, 0.65, 120, 260, 'bunny'),
+                        makeEnemy(630, 150, -0.9, 580, 730, 'bat', { baseY: 150 }),
+                        makeEnemy(260, 60, 0.85, 120, 360, 'bat', { baseY: 60 })
+                    ];
+                    hazards = [
+                        { x: 480, y: 385, w: 70, h: 15, type: 'spikes' },
+                        { x: 140, y: 105, w: 45, h: 15, type: 'spikes' }
+                    ];
+                    boss = null;
+                    goalPost = { x: 640, y: 150, w: 40, h: 50, unlocked: false };
+                }
+            },
+            {
+                title: 'Pollen Marsh',
+                story: 'Sneezy slime puddles bounce in the reeds. Dash diagonally to finish them!',
+                pillowsTotal: 4,
+                theme: {
+                    sky: ['#04140c', '#0a2418', '#12301c', '#1a2810'],
+                    moon: '#86efac',
+                    starDensity: 30
+                },
+                setup() {
+                    platforms = [
+                        { x: 0, y: 400, w: 800, h: 50, type: 'ground' },
+                        { x: 70, y: 320, w: 160, h: 18, type: 'static' },
+                        { x: 300, y: 260, w: 180, h: 18, type: 'static' },
+                        { x: 540, y: 200, w: 160, h: 18, type: 'static' },
+                        { x: 240, y: 140, w: 140, h: 18, type: 'static' },
+                        { x: 640, y: 320, w: 120, h: 18, type: 'static' }
+                    ];
+                    pillows = [
+                        { x: 120, y: 280, collected: false },
+                        { x: 360, y: 220, collected: false },
+                        { x: 590, y: 160, collected: false },
+                        { x: 280, y: 100, collected: false }
+                    ];
+                    enemies = [
+                        makeEnemy(100, 380, 0.5, 20, 280, 'slime'),
+                        makeEnemy(360, 240, -0.6, 300, 470, 'slime'),
+                        makeEnemy(560, 180, 0.45, 540, 690, 'scarecrow'),
+                        makeEnemy(680, 298, 0.7, 640, 760, 'fox'),
+                        makeEnemy(280, 90, 0.8, 240, 380, 'moth', { baseY: 90 })
+                    ];
+                    hazards = [
+                        { x: 400, y: 385, w: 90, h: 15, type: 'spikes' }
+                    ];
+                    alarmClocks = [];
+                    boss = null;
+                    goalPost = { x: 720, y: 350, w: 40, h: 50, unlocked: false };
+                }
+            },
+            {
+                title: 'Moonlit Orchard',
+                story: 'Foxes zip between scarecrows. Use dash stun, then FINISH the straw giants!',
+                pillowsTotal: 4,
+                theme: {
+                    sky: ['#12080c', '#241018', '#30141c', '#1c1014'],
+                    moon: '#fda4af',
+                    starDensity: 48
+                },
+                setup() {
+                    platforms = [
+                        { x: 0, y: 400, w: 800, h: 50, type: 'ground' },
+                        { x: 40, y: 300, w: 140, h: 18, type: 'static' },
+                        { x: 250, y: 240, w: 150, h: 18, type: 'static' },
+                        { x: 460, y: 180, w: 150, h: 18, type: 'static' },
+                        { x: 620, y: 280, w: 140, h: 18, type: 'static' },
+                        { x: 160, y: 120, w: 160, h: 18, type: 'static' }
+                    ];
+                    pillows = [
+                        { x: 80, y: 260, collected: false },
+                        { x: 300, y: 200, collected: false },
+                        { x: 500, y: 140, collected: false },
+                        { x: 200, y: 80, collected: false }
+                    ];
+                    enemies = [
+                        makeEnemy(80, 362, 0.4, 20, 240, 'scarecrow'),
+                        makeEnemy(280, 218, 1.1, 250, 390, 'fox'),
+                        makeEnemy(500, 158, -1.0, 460, 600, 'fox'),
+                        makeEnemy(650, 242, 0.5, 620, 760, 'ogre'),
+                        makeEnemy(200, 70, 0.7, 160, 320, 'moth', { baseY: 70 })
+                    ];
+                    hazards = [
+                        { x: 320, y: 385, w: 80, h: 15, type: 'spikes' }
+                    ];
+                    alarmClocks = [];
+                    boss = null;
+                    goalPost = { x: 700, y: 230, w: 40, h: 50, unlocked: false };
+                }
+            },
+            {
+                title: 'Gear Cathedral',
+                story: 'Clocklings patrol the nave. Ring nothing — just collect pillows and dash through brass!',
+                pillowsTotal: 4,
+                theme: {
+                    sky: ['#1a1408', '#2a2010', '#3a2810', '#241808'],
+                    moon: '#fde68a',
+                    starDensity: 25
+                },
+                setup() {
+                    platforms = [
+                        { x: 0, y: 400, w: 800, h: 50, type: 'ground' },
+                        { x: 100, y: 310, w: 140, h: 18, type: 'static' },
+                        { x: 320, y: 250, w: 160, h: 18, type: 'static' },
+                        { x: 540, y: 190, w: 150, h: 18, type: 'static' },
+                        { x: 200, y: 150, w: 140, h: 18, type: 'static' },
+                        { x: 660, y: 310, w: 120, h: 18, type: 'static' }
+                    ];
+                    pillows = [
+                        { x: 140, y: 270, collected: false },
+                        { x: 380, y: 210, collected: false },
+                        { x: 590, y: 150, collected: false },
+                        { x: 240, y: 110, collected: false }
+                    ];
+                    enemies = [
+                        makeEnemy(120, 372, 0.7, 20, 300, 'clockling'),
+                        makeEnemy(350, 222, -0.65, 320, 470, 'clockling'),
+                        makeEnemy(560, 162, 0.55, 540, 680, 'clockling'),
+                        makeEnemy(680, 282, 0.5, 660, 780, 'ogre'),
+                        makeEnemy(240, 90, 0.85, 200, 340, 'bat', { baseY: 90 })
+                    ];
+                    hazards = [
+                        { x: 430, y: 385, w: 70, h: 15, type: 'spikes' }
+                    ];
+                    alarmClocks = [];
+                    boss = null;
+                    goalPost = { x: 700, y: 260, w: 40, h: 50, unlocked: false };
+                }
+            },
+            {
+                title: 'Nightmare King\'s Lair',
+                story: 'The Nightmare King looms! Blast all 4 alarm clocks with Maximum Sneezes to defeat him! Dodge his Nightmare Orbs!',
+                pillowsTotal: 4,
+                theme: {
+                    sky: ['#08030d', '#160820', '#241030', '#320f2a'],
+                    moon: '#fda4af',
+                    starDensity: 55
+                },
+                setup() {
+                    platforms = [
+                        { x: 0, y: 400, w: 800, h: 50, type: 'ground' },
+                        { x: 80, y: 300, w: 150, h: 18, type: 'static' },
+                        { x: 570, y: 300, w: 150, h: 18, type: 'static' },
+                        { x: 300, y: 230, w: 200, h: 18, type: 'static' },
+                        { x: 140, y: 140, w: 150, h: 18, type: 'static' },
+                        { x: 510, y: 140, w: 150, h: 18, type: 'static' }
+                    ];
+                    pillows = [
+                        { x: 130, y: 260, collected: false },
+                        { x: 640, y: 260, collected: false },
+                        { x: 200, y: 100, collected: false },
+                        { x: 570, y: 100, collected: false }
+                    ];
+                    alarmClocks = [
+                        { x: 145, y: 285, rung: false },
+                        { x: 655, y: 285, rung: false },
+                        { x: 215, y: 125, rung: false },
+                        { x: 585, y: 125, rung: false }
+                    ];
+                    enemies = [];
+                    hazards = [];
+                    bossProjectiles = [];
+                    boss = { x: 350, y: 30, w: 110, h: 80, vx: 1.2, hp: 240, maxHp: 240, attackTimer: 80, name: 'king', phase: 1, announced: 1 };
+                    goalPost = null;
+                }
+            }
+        ];
+
+        const player = {
+            x: 50,
+            y: 300,
+            w: 32,
+            h: 40,
+            vx: 0,
+            vy: 0,
+            speed: 3.2,
+            gravity: 0.28,
+            recoilBase: 7.0,
+            isGrounded: false,
+            coyoteTimer: 0,
+            isGliding: false,
+            isSlamming: false,
+            isCharging: false,
+            isDashing: false,
+            dashTimer: 0,
+            dashCooldown: 0,
+            dashDirX: 1,
+            dashDirY: 0,
+            dashTrail: [],
+            chargeTimer: 0,
+            maxChargeTimer: 60,
+            sneezeEnergy: 100,
+            maxSneezeEnergy: 100,
+            sneezeCooldownTimer: 0,
+            maxSneezeCooldown: 120,
+            facing: 1,
+            scaleX: 1,
+            scaleY: 1,
+            health: 3,
+            maxHealth: 3,
+            invincibleTimer: 0,
+            score: 0,
+            pillowsCollected: 0
+        };
+
+        const keys = {
+            Left: false,
+            Right: false,
+            Up: false,
+            Down: false,
+            Sneeze: false,
+            Dash: false
+        };
+
+        let cheatCode = '';
+
+        window.addEventListener('keydown', (e) => {
+            sound.init();
+            
+            if (e.key && e.key.length === 1) {
+                cheatCode += e.key.toLowerCase();
+                if (cheatCode.length > 6) cheatCode = cheatCode.slice(-6);
+                if (cheatCode === 'pickle' && currentGameState === STATE.PLAYING) {
+                    cheatCode = '';
+                    player.score += 1000;
+                    levelComplete();
+                    return;
+                }
+            }
+
+            if (e.code === 'KeyM') {
+                sound.muted = !sound.muted;
+            }
+            if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.Left = true;
+            if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.Right = true;
+            if (e.code === 'KeyW' || e.code === 'ArrowUp' || e.code === 'Space') {
+                keys.Up = true;
+            }
+            if (e.code === 'KeyS' || e.code === 'ArrowDown') {
+                keys.Down = true;
+                if (player.isGrounded && currentGameState === STATE.PLAYING) {
+                    player.dropTimer = 8;
+                    player.isGrounded = false;
+                    player.y += 2;
+                } else if (!player.isGrounded && currentGameState === STATE.PLAYING && !player.isSlamming && !player.isDashing) {
+                    player.isSlamming = true;
+                    player.vy = 13;
+                }
+            }
+            if (e.code === 'KeyF' || e.code === 'KeyJ' || e.code === 'ControlLeft' || e.code === 'ControlRight') {
+                if (!keys.Dash && currentGameState === STATE.PLAYING) startDash();
+                keys.Dash = true;
+            }
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyE') {
+                if (currentGameState === STATE.START) {
+                    initLevel(0);
+                } else if (currentGameState === STATE.MODAL) {
+                    if (modalActionCallback) modalActionCallback();
+                } else if (currentGameState === STATE.VICTORY && victoryPhase === 4) {
+                    initLevel(0);
+                } else if (!keys.Sneeze && currentGameState === STATE.PLAYING) {
+                    startChargingSneeze();
+                }
+                keys.Sneeze = true;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.Left = false;
+            if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.Right = false;
+            if (e.code === 'KeyW' || e.code === 'ArrowUp' || e.code === 'Space') keys.Up = false;
+            if (e.code === 'KeyS' || e.code === 'ArrowDown') keys.Down = false;
+            if (e.code === 'KeyF' || e.code === 'KeyJ' || e.code === 'ControlLeft' || e.code === 'ControlRight') keys.Dash = false;
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyE') {
+                if (keys.Sneeze && currentGameState === STATE.PLAYING) {
+                    releaseSneezeBlast();
+                }
+                keys.Sneeze = false;
+            }
+        });
+
+        function wrapText(context, text, x, y, maxWidth, lineHeight) {
+            const words = text.split(' ');
+            let line = '';
+            for(let n = 0; n < words.length; n++) {
+                const testLine = line + words[n] + ' ';
+                const metrics = context.measureText(testLine);
+                const testWidth = metrics.width;
+                if (testWidth > maxWidth && n > 0) {
+                    context.fillText(line, x, y);
+                    line = words[n] + ' ';
+                    y += lineHeight;
+                } else {
+                    line = testLine;
+                }
+            }
+            context.fillText(line, x, y);
+        }
+
+        function spawnFloatingText(x, y, text, color = '#f1f5f9') {
+            floatingTexts.push({ x, y, text, color, life: 45, maxLife: 45 });
+        }
+
+        function enemyStats(type) {
+            if (type === 'ogre') return { hp: 3, maxHp: 3, strength: 3, w: 36, h: 36 };
+            if (type === 'bat') return { hp: 2, maxHp: 2, strength: 2, w: 28, h: 22, fly: true };
+            if (type === 'moth') return { hp: 2, maxHp: 2, strength: 2, w: 30, h: 24, fly: true };
+            if (type === 'slime') return { hp: 2, maxHp: 2, strength: 1, w: 28, h: 20 };
+            if (type === 'clockling') return { hp: 2, maxHp: 2, strength: 2, w: 28, h: 28 };
+            if (type === 'scarecrow') return { hp: 3, maxHp: 3, strength: 3, w: 30, h: 38 };
+            if (type === 'fox') return { hp: 1, maxHp: 1, strength: 1, w: 32, h: 22 };
+            return { hp: 1, maxHp: 1, strength: 1, w: 26, h: 24 };
+        }
+
+        function isFlyer(e) { return e.type === 'bat' || e.type === 'moth' || e.fly; }
+
+        function makeEnemy(x, y, vx, minX, maxX, type, extra) {
+            const s = enemyStats(type);
+            return Object.assign({
+                x, y, vx, minX, maxX, type,
+                w: s.w, h: s.h, hp: s.hp, maxHp: s.maxHp, strength: s.strength,
+                alive: true, stunned: 0, flash: 0
+            }, extra || {});
+        }
+
+        function startDash() {
+            if (player.isDashing || player.dashCooldown > 0 || player.isCharging) return;
+            let dx = 0, dy = 0;
+            if (keys.Left) dx -= 1;
+            if (keys.Right) dx += 1;
+            if (keys.Up) dy -= 1;
+            if (keys.Down) dy += 1;
+            if (dx === 0 && dy === 0) { dx = player.facing; dy = 0; }
+            if (dx === 0 && dy > 0) { dx = player.facing; dy = 0; }
+            const mag = Math.hypot(dx, dy) || 1;
+            dx /= mag; dy /= mag;
+            player.isDashing = true;
+            player.dashTimer = 12;
+            player.dashCooldown = 32;
+            player.dashHitIds = [];
+            player.dashDirX = dx;
+            player.dashDirY = dy;
+            player.isSlamming = false;
+            player.invincibleTimer = Math.max(player.invincibleTimer, 12);
+            if (dx !== 0) player.facing = dx > 0 ? 1 : -1;
+            sound.dashSound();
+            screenShake.trigger(3);
+            spawnFloatingText(player.x, player.y - 18, 'DASH!', '#a5f3fc');
+        }
+
+        function triggerImpactFrame(e) {
+            impactFrame.active = true;
+            impactFrame.timer = impactFrame.duration;
+            impactFrame.px = player.x + player.w / 2;
+            impactFrame.py = player.y + player.h / 2;
+            impactFrame.ex = e.x + e.w / 2;
+            impactFrame.ey = e.y + e.h / 2;
+            impactFrame.flyX = e.x;
+            impactFrame.flyY = e.y;
+            impactFrame.flyVX = player.dashDirX * 14;
+            impactFrame.flyVY = player.dashDirY * 10 - 4;
+            impactFrame.kanji = KANJI_POOL[Math.floor(Math.random() * KANJI_POOL.length)];
+            sound.executeSound();
+            screenShake.trigger(18);
+        }
+
+        function dashHitEnemy(e) {
+            const low = e.hp <= 1 || e.stunned > 0 || (e.hp / e.maxHp) <= 0.34;
+            if (low) {
+                e.alive = false;
+                e.hp = 0;
+                player.score += 400;
+                spawnFloatingText(e.x, e.y - 18, 'FINISH!', '#fde047');
+                spawnFeatherBurst(e.x + e.w / 2, e.y + e.h / 2, 22);
+                triggerImpactFrame(e);
+                return;
+            }
+            e.hp -= 1;
+            e.flash = 8;
+            if (e.strength >= 2) {
+                e.stunned = 70;
+                spawnFloatingText(e.x, e.y - 12, 'STUNNED!', '#fbbf24');
+                sound.hitSound();
+            } else {
+                e.alive = false;
+                player.score += 200;
+                spawnFloatingText(e.x, e.y - 12, '+200 DASH!', '#67e8f9');
+                spawnFeatherBurst(e.x + 12, e.y + 10, 12);
+                sound.stompSound();
+            }
+        }
+
+        function startChargingSneeze() {
+            if (player.sneezeCooldownTimer > 0) return;
+
+            if (player.sneezeEnergy < 25) {
+                spawnFloatingText(player.x - 10, player.y - 15, 'NO ENERGY!', '#ef4444');
+                sound.hitSound();
+                return;
+            }
+
+            player.isCharging = true;
+            player.chargeTimer = 0;
+            sound.startChargeSound();
+        }
+
+        function releaseSneezeBlast() {
+            if (!player.isCharging) return;
+
+            player.isCharging = false;
+            sound.stopChargeSound();
+
+            const chargeRatio = Math.min(1.0, player.chargeTimer / player.maxChargeTimer);
+            const energyCost = 25 + chargeRatio * 40;
+
+            player.sneezeEnergy = Math.max(0, player.sneezeEnergy - energyCost);
+            player.sneezeCooldownTimer = player.maxSneezeCooldown;
+
+            const recoilMult = 1.0 + chargeRatio * 1.8;
+            player.vx = -player.facing * player.recoilBase * recoilMult;
+            player.vy = -player.recoilBase * (0.8 + chargeRatio * 1.0);
+            player.isGrounded = false;
+            player.isSlamming = false;
+
+            player.scaleX = 1.6;
+            player.scaleY = 0.6;
+
+            sound.sneezeSound(0.8 + chargeRatio * 1.2);
+            screenShake.trigger(4 + chargeRatio * 12);
+
+            const blastName = chargeRatio > 0.8 ? 'MEGA SNEEZE!' : chargeRatio > 0.4 ? 'POWER SNEEZE!' : 'SNEEZE BLAST!';
+            spawnFloatingText(player.x - 15, player.y - 25, blastName, chargeRatio > 0.8 ? '#f43f5e' : '#f59e0b');
+            spawnFeatherBurst(player.x + player.w / 2, player.y + player.h / 2, Math.floor(10 + chargeRatio * 18));
+
+            shockwaves.push({
+                x: player.x + (player.facing > 0 ? player.w : 0),
+                y: player.y + player.h / 2,
+                radius: 10,
+                maxRadius: 40 + chargeRatio * 80,
+                alpha: 1.0,
+                color: chargeRatio > 0.8 ? '#f43f5e' : '#38bdf8'
+            });
+
+            const particleCount = Math.floor(16 + chargeRatio * 35);
+            for (let i = 0; i < particleCount; i++) {
+                particles.push({
+                    x: player.x + (player.facing > 0 ? player.w : 0),
+                    y: player.y + player.h / 2 + (Math.random() - 0.5) * 16,
+                    vx: (player.facing * (Math.random() * 8 + 3)) * (0.8 + chargeRatio * 1.2),
+                    vy: (Math.random() - 0.5) * (6 + chargeRatio * 6),
+                    size: Math.random() * 10 + 5 + chargeRatio * 6,
+                    life: 30 + chargeRatio * 20,
+                    maxLife: 30 + chargeRatio * 20,
+                    color: i % 2 === 0 ? '#fda4af' : '#e0f2fe'
+                });
+            }
+
+            const blastRadius = 80 + chargeRatio * 100;
+
+            alarmClocks.forEach(clock => {
+                if (!clock.rung) {
+                    const dist = Math.hypot((player.x + player.w/2) - clock.x, (player.y + player.h/2) - clock.y);
+                    if (dist < blastRadius) {
+                        clock.rung = true;
+                        sound.pillowSound();
+                        const dmg = Math.floor(30 + chargeRatio * 45);
+                        spawnFloatingText(clock.x, clock.y - 20, `ALARM RUNG! -${dmg} HP`, '#fbbf24');
+                        spawnFeatherBurst(clock.x, clock.y, 8);
+                        if (boss) {
+                            boss.hp -= dmg;
+                            if (boss.hp <= 0) {
+                                boss.hp = 0;
+                                levelComplete();
+                            }
+                        }
+                    }
+                }
+            });
+
+            enemies.forEach(e => {
+                if (e.alive) {
+                    const dist = Math.hypot((player.x + player.w/2) - e.x, (player.y + player.h/2) - e.y);
+                    if (dist < blastRadius) {
+                        e.alive = false;
+                        player.score += 200;
+                        sound.stompSound();
+                        spawnFloatingText(e.x, e.y - 15, '+200 BLAST!', '#38bdf8');
+                        spawnFeatherBurst(e.x + 12, e.y + 11, 10);
+                    }
+                }
+            });
+            player.chargeTimer = 0;
+        }
+
+        function takeDamage(amount) {
+            if (player.invincibleTimer > 0) return;
+
+            player.health -= amount;
+            player.invincibleTimer = 60;
+            sound.hitSound();
+            screenShake.trigger(8);
+
+            player.isCharging = false;
+            sound.stopChargeSound();
+
+            spawnFloatingText(player.x, player.y - 15, '-1 HP', '#f43f5e');
+
+            if (player.health <= 0) {
+                gameOver();
+            }
+        }
+
+        function initLevel(index) {
+            currentLevelIndex = index;
+            const lvl = levels[currentLevelIndex];
+
+            player.x = 50;
+            player.y = 300;
+            player.vx = 0;
+            player.vy = 0;
+            player.health = player.maxHealth;
+            player.sneezeEnergy = player.maxSneezeEnergy;
+            player.sneezeCooldownTimer = 0;
+            player.isCharging = false;
+            player.chargeTimer = 0;
+            player.isDashing = false;
+            player.dashTimer = 0;
+            player.dashCooldown = 0;
+            player.dashTrail = [];
+            player.pillowsCollected = 0;
+            impactFrame.active = false;
+            hazards = [];
+            bossProjectiles = [];
+
+            lvl.setup();
+            currentGameState = STATE.PLAYING;
+        }
+
+        function levelComplete() {
+            player.score += 500;
+
+            if (currentLevelIndex + 1 < levels.length) {
+                currentGameState = STATE.MODAL;
+                modalData.title = 'Chapter Complete!';
+                modalData.story = levels[currentLevelIndex].story;
+                modalActionCallback = () => {
+                    initLevel(currentLevelIndex + 1);
+                };
+            } else {
+                // Trigger victory cutscene!
+                currentGameState = STATE.VICTORY;
+                victoryTimer = 0;
+                victoryPhase = 0;
+                victoryPlayerX = player.x;
+                victoryCloud = { x: CANVAS_WIDTH / 2, y: 120, r: 70, spin: 0, scaleX: 1, scaleY: 1, alpha: 1 };
+                victoryStar = { x: CANVAS_WIDTH / 2, y: 120, r: 0, alpha: 0, spin: 0 };
+                victoryShockwaves = [];
+            }
+        }
+
+        function gameOver() {
+            currentGameState = STATE.MODAL;
+            modalData.title = 'Game Over';
+            modalData.story = 'Sleepyhead fell into a deep allergy nap! Try charging up your Sneezes!';
+            modalActionCallback = () => {
+                initLevel(currentLevelIndex);
+            };
+        }
+
+        function update() {
+            gameTime++;
+
+            // Victory animation update
+            if (currentGameState === STATE.VICTORY) {
+                victoryTimer++;
+                screenShake.update();
+
+                if (victoryPhase === 0) {
+                    // Phase 0: player walks to center and charges sneeze
+                    if (victoryPlayerX < CANVAS_WIDTH / 2 - 80) victoryPlayerX += 3;
+                    if (victoryTimer > 90) {
+                        victoryPhase = 1;
+                        victoryTimer = 0;
+                        // Impact shockwave
+                        victoryShockwaves.push({ x: CANVAS_WIDTH/2, y: 120, radius: 10, maxRadius: 300, alpha: 1.0, color: '#38bdf8' });
+                        victoryShockwaves.push({ x: CANVAS_WIDTH/2, y: 120, radius: 10, maxRadius: 220, alpha: 1.0, color: '#ffffff' });
+                        screenShake.trigger(20);
+                    }
+                } else if (victoryPhase === 1) {
+                    // Phase 1: impact frames - cloud squishes outward
+                    victoryCloud.scaleX = 1 + Math.sin(victoryTimer * 0.3) * 2;
+                    victoryCloud.scaleY = 0.4 + Math.abs(Math.cos(victoryTimer * 0.2)) * 0.8;
+                    victoryShockwaves.forEach(sw => { sw.radius += 8; sw.alpha -= 0.03; });
+                    victoryShockwaves = victoryShockwaves.filter(sw => sw.alpha > 0);
+                    if (victoryTimer > 40) { victoryPhase = 2; victoryTimer = 0; }
+                } else if (victoryPhase === 2) {
+                    // Phase 2: cloud spirals away
+                    victoryCloud.spin += 0.15;
+                    victoryCloud.scaleX = 1 + Math.sin(victoryTimer * 0.2) * 0.3;
+                    victoryCloud.scaleY = 1 + Math.cos(victoryTimer * 0.2) * 0.3;
+                    victoryCloud.alpha = Math.max(0, 1 - victoryTimer / 80);
+                    victoryCloud.x += Math.cos(victoryCloud.spin) * 4;
+                    victoryCloud.y -= 1.5;
+                    if (victoryTimer > 80) { victoryPhase = 3; victoryTimer = 0; victoryStar.x = victoryCloud.x; victoryStar.y = victoryCloud.y; }
+                } else if (victoryPhase === 3) {
+                    // Phase 3: star forms
+                    victoryStar.r = Math.min(30, victoryStar.r + 1);
+                    victoryStar.alpha = Math.min(1, victoryTimer / 30);
+                    victoryStar.spin += 0.05;
+                    if (victoryTimer > 60) { victoryPhase = 4; victoryTimer = 0; }
+                } else if (victoryPhase === 4) {
+                    // Phase 4: THE END screen - wait for input
+                }
+                return;
+            }
+
+            if (currentGameState !== STATE.PLAYING) return;
+            screenShake.update();
+
+            if (impactFrame.active) {
+                impactFrame.timer--;
+                impactFrame.flyX += impactFrame.flyVX;
+                impactFrame.flyY += impactFrame.flyVY;
+                impactFrame.flyVY += 0.35;
+                if (impactFrame.timer <= 0) impactFrame.active = false;
+                return;
+            }
+
+            if (player.invincibleTimer > 0) player.invincibleTimer--;
+            if (player.sneezeCooldownTimer > 0) player.sneezeCooldownTimer--;
+            if (player.dashCooldown > 0) player.dashCooldown--;
+
+            if (player.isCharging) {
+                player.chargeTimer = Math.min(player.maxChargeTimer, player.chargeTimer + 1);
+                if (gameTime % 2 === 0) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = 30 + Math.random() * 20;
+                    particles.push({
+                        x: (player.x + player.w/2) + Math.cos(angle) * dist,
+                        y: (player.y + player.h/2) + Math.sin(angle) * dist,
+                        vx: -Math.cos(angle) * 3,
+                        vy: -Math.sin(angle) * 3,
+                        size: Math.random() * 4 + 2,
+                        life: 15,
+                        maxLife: 15,
+                        color: '#f59e0b'
+                    });
+                }
+                if (player.chargeTimer > player.maxChargeTimer * 0.7) {
+                    screenShake.trigger(1.5);
+                }
+            }
+
+            if (player.sneezeEnergy < player.maxSneezeEnergy && !player.isCharging) {
+                player.sneezeEnergy = Math.min(player.maxSneezeEnergy, player.sneezeEnergy + 0.35);
+            }
+
+            player.scaleX += (1 - player.scaleX) * 0.15;
+            player.scaleY += (1 - player.scaleY) * 0.15;
+
+            if (Math.abs(player.vx) < 0.2 && player.isGrounded && gameTime % 40 === 0) {
+                zzzParticles.push({
+                    x: player.x + player.w / 2 + (player.facing > 0 ? 8 : -8),
+                    y: player.y - 5,
+                    vx: 0.3 * player.facing,
+                    vy: -0.6,
+                    life: 60,
+                    scale: 1
+                });
+            }
+
+            let accel = 0;
+            if (!player.isDashing) {
+                if (keys.Left) {
+                    accel = -player.speed;
+                    player.facing = -1;
+                } else if (keys.Right) {
+                    accel = player.speed;
+                    player.facing = 1;
+                }
+            }
+
+            if (player.isDashing) {
+                const dashSpeed = 11;
+                player.vx = player.dashDirX * dashSpeed;
+                player.vy = player.dashDirY * dashSpeed;
+                player.dashTimer--;
+                player.dashTrail.push({ x: player.x, y: player.y, life: 8 });
+                if (player.dashTrail.length > 10) player.dashTrail.shift();
+                if (player.dashTimer <= 0) {
+                    player.isDashing = false;
+                    player.vx *= 0.4;
+                    player.vy *= 0.35;
+                }
+            } else {
+                const chargeSpeedMult = player.isCharging ? 0.5 : 1.0;
+                player.vx += (accel * chargeSpeedMult - player.vx) * 0.22;
+            }
+            player.dashTrail.forEach(t => t.life--);
+            player.dashTrail = player.dashTrail.filter(t => t.life > 0);
+            player.x += player.vx;
+
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.w > CANVAS_WIDTH) player.x = CANVAS_WIDTH - player.w;
+
+            if (player.isGrounded) {
+                player.coyoteTimer = 6;
+                player.isGliding = false;
+                player.isSlamming = false;
+            } else {
+                if (player.coyoteTimer > 0) player.coyoteTimer--;
+            }
+
+            if (keys.Up && !player.isDashing) {
+                if (player.coyoteTimer > 0) {
+                    player.vy = -7.8;
+                    player.isGrounded = false;
+                    player.coyoteTimer = 0;
+                    player.scaleX = 0.7;
+                    player.scaleY = 1.3;
+                    sound.jumpSound();
+                } else if (player.vy > 0) {
+                    player.isGliding = true;
+                    player.vy = Math.min(player.vy, 1.2);
+                }
+            } else {
+                player.isGliding = false;
+            }
+
+            if (!player.isGrounded && !player.isDashing) {
+                player.vy += player.gravity;
+            }
+
+            const prevY = player.y;
+            player.y += player.vy;
+
+            if (player.y > CANVAS_HEIGHT + 50) {
+                takeDamage(1);
+                player.x = 50;
+                player.y = 200;
+                player.vy = 0;
+            }
+
+            player.isGrounded = false;
+            if (player.dropTimer > 0) player.dropTimer--;
+
+            const wasSlammingBeforeLand = player.isSlamming;
+            platforms.forEach(p => {
+                if (p.type === 'moving') {
+                    p.x += p.vx;
+                    if (p.x <= p.minX || p.x + p.w >= p.maxX) {
+                        p.vx = -p.vx;
+                    }
+                }
+                // Skip collision if player is dropping through
+                if (player.dropTimer > 0) return;
+                if (player.x + player.w > p.x && player.x < p.x + p.w) {
+                    if (prevY + player.h <= p.y + 10 && player.y + player.h >= p.y && player.vy >= 0) {
+                        player.y = p.y - player.h;
+                        player.vy = 0;
+                        player.isGrounded = true;
+                        if (p.type === 'moving') {
+                            player.x += p.vx;
+                        }
+                    }
+                }
+            });
+
+            // Ground pound impact effect
+            if (wasSlammingBeforeLand && player.isGrounded) {
+                player.isSlamming = false;
+                screenShake.trigger(10);
+                shockwaves.push({
+                    x: player.x + player.w / 2,
+                    y: player.y + player.h,
+                    radius: 8,
+                    maxRadius: 120,
+                    alpha: 1.0,
+                    color: '#38bdf8'
+                });
+                shockwaves.push({
+                    x: player.x + player.w / 2,
+                    y: player.y + player.h,
+                    radius: 4,
+                    maxRadius: 80,
+                    alpha: 0.8,
+                    color: '#ffffff'
+                });
+                for (let i = 0; i < 18; i++) {
+                    const angle = Math.PI + (Math.random() - 0.5) * Math.PI;
+                    const speed = Math.random() * 5 + 2;
+                    particles.push({
+                        x: player.x + player.w / 2 + (Math.random() - 0.5) * 10,
+                        y: player.y + player.h,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed - 1,
+                        size: Math.random() * 8 + 4,
+                        life: 25,
+                        maxLife: 25,
+                        color: i % 3 === 0 ? '#fef08a' : i % 3 === 1 ? '#38bdf8' : '#c084fc'
+                    });
+                }
+                spawnFloatingText(player.x + player.w/2 - 30, player.y - 10, 'GROUND POUND!', '#fde047');
+                sound.hitSound();
+            }
+
+            if (boss) {
+                const ratio = boss.hp / boss.maxHp;
+                const nextPhase = ratio > 0.66 ? 1 : ratio > 0.33 ? 2 : 3;
+                if (nextPhase !== boss.phase) {
+                    boss.phase = nextPhase;
+                    screenShake.trigger(16);
+                    spawnFloatingText(CANVAS_WIDTH/2 - 40, 80, 'PHASE ' + boss.phase + '!', '#f43f5e');
+                    sound.executeSound();
+                    if (boss.phase === 2) {
+                        enemies.push(makeEnemy(120, 80, 0.9, 40, 300, 'bat', { baseY: 80 }));
+                        enemies.push(makeEnemy(620, 80, -0.9, 500, 760, 'moth', { baseY: 90 }));
+                    }
+                    if (boss.phase === 3) {
+                        enemies.push(makeEnemy(80, 366, 0.6, 20, 280, 'ogre'));
+                        enemies.push(makeEnemy(680, 366, -0.6, 520, 780, 'ogre'));
+                    }
+                }
+                const speedMult = boss.phase === 1 ? 1.0 : boss.phase === 2 ? 1.6 : 2.2;
+                boss.x += boss.vx * speedMult;
+                if (boss.x <= 160 || boss.x + boss.w >= 640) boss.vx = -boss.vx;
+                if (boss.phase === 3) {
+                    boss.y = 20 + Math.sin(gameTime * 0.12) * 18;
+                }
+            }
+
+            stardustParticles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.alpha += Math.sin(gameTime * p.pulseSpeed) * 0.02;
+                if (p.x > CANVAS_WIDTH + 10) p.x = -10;
+                if (p.y < -10) p.y = CANVAS_HEIGHT + 10;
+                if (p.y > CANVAS_HEIGHT + 10) p.y = -10;
+            });
+
+            featherParticles.forEach(f => {
+                f.x += f.vx;
+                f.y += f.vy;
+                f.vy += 0.08;
+                f.vx *= 0.96;
+                f.rotation += f.vRot;
+                f.life--;
+            });
+            featherParticles = featherParticles.filter(f => f.life > 0);
+
+            pillows.forEach(pillow => {
+                if (!pillow.collected) {
+                    if (player.x + player.w > pillow.x && player.x < pillow.x + 22 &&
+                        player.y + player.h > pillow.y && player.y < pillow.y + 22) {
+                        pillow.collected = true;
+                        player.pillowsCollected++;
+                        player.score += 250;
+                        sound.pillowSound();
+                        spawnFloatingText(pillow.x, pillow.y - 10, '+250 PILLOW!', '#38bdf8');
+                        spawnFeatherBurst(pillow.x + 12, pillow.y + 9, 14);
+
+                        const lvl = levels[currentLevelIndex];
+                        if (player.pillowsCollected >= lvl.pillowsTotal) {
+                            if (goalPost) goalPost.unlocked = true;
+                        }
+                    }
+                }
+            });
+
+            enemies.forEach(e => {
+                if (!e.alive) return;
+                if (e.flash > 0) e.flash--;
+                if (e.stunned > 0) {
+                    e.stunned--;
+                } else {
+                    e.x += e.vx;
+                    if (e.x <= e.minX || e.x + e.w >= e.maxX) {
+                        e.vx = -e.vx;
+                    }
+                    if (isFlyer(e) && e.baseY != null) {
+                        const amp = e.type === 'moth' ? 24 : 18;
+                        e.y = e.baseY + Math.sin(gameTime * 0.08 + e.x * 0.05) * amp;
+                    }
+                }
+                const hitPad = player.isDashing ? 6 : 0;
+                if (player.x + player.w + hitPad > e.x && player.x - hitPad < e.x + e.w &&
+                    player.y + player.h + hitPad > e.y && player.y - hitPad < e.y + e.h) {
+                    if (player.isDashing) {
+                        if (!player.dashHitIds) player.dashHitIds = [];
+                        if (!player.dashHitIds.includes(e)) {
+                            player.dashHitIds.push(e);
+                            dashHitEnemy(e);
+                        }
+                    } else if (!isFlyer(e) && prevY + player.h <= e.y + 8 && player.vy > 0) {
+                        e.hp -= 1;
+                        player.vy = -6.0;
+                        player.scaleX = 1.2;
+                        player.scaleY = 0.8;
+                        sound.stompSound();
+                        if (e.hp <= 0) {
+                            e.alive = false;
+                            player.score += 150;
+                            spawnFloatingText(e.x, e.y - 10, '+150 STOMP!', '#38bdf8');
+                        } else {
+                            e.stunned = 40;
+                            spawnFloatingText(e.x, e.y - 10, 'STUN!', '#fbbf24');
+                        }
+                    } else if (e.stunned <= 0) {
+                        takeDamage(1);
+                    }
+                }
+            });
+
+            hazards.forEach(hz => {
+                if (player.x + player.w > hz.x && player.x < hz.x + hz.w &&
+                    player.y + player.h > hz.y && player.y < hz.y + hz.h) {
+                    takeDamage(1);
+                    if (player.invincibleTimer >= 55) {
+                        player.vy = -6.5;
+                    }
+                }
+            });
+
+            if (boss) {
+                const phase2 = boss.hp < boss.maxHp * 0.5;
+                boss.attackTimer--;
+                if (boss.attackTimer <= 0) {
+                    const bx = boss.x + Math.sin(gameTime * 0.05) * 22 + boss.w / 2;
+                    const by = boss.y + boss.h / 2;
+                    const dx = (player.x + player.w / 2) - bx;
+                    const dy = (player.y + player.h / 2) - by;
+                    const dist = Math.max(1, Math.hypot(dx, dy));
+                    const speed = phase2 ? 4.4 : 3.4;
+                    bossProjectiles.push({
+                        x: bx, y: by,
+                        vx: (dx / dist) * speed,
+                        vy: (dy / dist) * speed,
+                        r: 9
+                    });
+                    sound.hitSound();
+                    boss.attackTimer = phase2 ? 55 : 85;
+                }
+            }
+
+            bossProjectiles.forEach(bp => {
+                bp.x += bp.vx;
+                bp.y += bp.vy;
+                if (player.x + player.w > bp.x - bp.r && player.x < bp.x + bp.r &&
+                    player.y + player.h > bp.y - bp.r && player.y < bp.y + bp.r) {
+                    takeDamage(1);
+                    bp.dead = true;
+                }
+            });
+            bossProjectiles = bossProjectiles.filter(bp => !bp.dead && bp.x > -30 && bp.x < CANVAS_WIDTH + 30 && bp.y > -30 && bp.y < CANVAS_HEIGHT + 30);
+
+            if (goalPost && goalPost.unlocked) {
+                if (player.x + player.w > goalPost.x && player.x < goalPost.x + goalPost.w &&
+                    player.y + player.h > goalPost.y && player.y < goalPost.y + goalPost.h) {
+                    levelComplete();
+                }
+            }
+
+            shockwaves.forEach(sw => {
+                sw.radius += 4;
+                sw.alpha -= 0.04;
+            });
+            shockwaves = shockwaves.filter(sw => sw.alpha > 0);
+
+            particles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+            });
+            particles = particles.filter(p => p.life > 0);
+
+            zzzParticles.forEach(z => {
+                z.x += z.vx;
+                z.y += z.vy;
+                z.life--;
+            });
+            zzzParticles = zzzParticles.filter(z => z.life > 0);
+
+            floatingTexts.forEach(ft => {
+                ft.y -= 0.7;
+                ft.life--;
+            });
+            floatingTexts = floatingTexts.filter(ft => ft.life > 0);
+        }
+
+        function render() {
+            ctx.save();
+            ctx.scale(0.5, 0.5);
+            ctx.translate(Math.round(screenShake.x), Math.round(screenShake.y));
+
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            if (currentGameState === STATE.START) {
+                ctx.fillStyle = '#030611';
+                ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+                ctx.fillStyle = '#38bdf8';
+                ctx.font = 'bold 64px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('SleepySneezes', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 - 40);
+                
+                ctx.fillStyle = '#f1f5f9';
+                ctx.font = '24px monospace';
+                ctx.fillText('WASD/Arrows: Move & Jump', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 10);
+                ctx.fillText('SNEEZE (Shift/E): Charge & Blast!', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 42);
+                ctx.fillText('DASH (F / Ctrl): Any direction except straight down', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 74);
+                
+                if (Math.floor(gameTime / 30) % 2 === 0) {
+                    ctx.fillStyle = '#f43f5e';
+                    ctx.font = 'bold 32px monospace';
+                    ctx.fillText('PRESS SNEEZE TO START', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 130);
+                }
+                ctx.restore();
+                return;
+            }
+            if (currentGameState === STATE.VICTORY) {
+                // Dark sky backdrop
+                ctx.fillStyle = '#030611';
+                ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+                // Twinkling stars
+                ctx.fillStyle = '#ffffff';
+                for (let i = 0; i < 60; i++) {
+                    const sx = (i * 53 + gameTime * 0.05) % CANVAS_WIDTH;
+                    const sy = (i * 29) % (CANVAS_HEIGHT - 60);
+                    if (Math.abs(Math.sin(gameTime * 0.05 + i)) > 0.5) {
+                        ctx.fillRect(Math.round(sx), Math.round(sy), 2, 2);
+                    }
+                }
+
+                ctx.save();
+                ctx.translate(Math.round(screenShake.x), Math.round(screenShake.y));
+
+                // Shockwaves
+                victoryShockwaves.forEach(sw => {
+                    ctx.globalAlpha = sw.alpha;
+                    ctx.fillStyle = sw.color;
+                    const r = Math.round(sw.radius);
+                    ctx.fillRect(Math.round(sw.x) - r, Math.round(sw.y) - r, r*2, r*2);
+                    ctx.clearRect(Math.round(sw.x) - r + 4, Math.round(sw.y) - r + 4, r*2 - 8, r*2 - 8);
+                    ctx.globalAlpha = 1.0;
+                });
+
+                // Draw player in victory pose
+                const vpx = Math.round(victoryPlayerX);
+                const vpy = 290;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(vpx - 6, vpy, 12, 12); // head
+                ctx.fillRect(vpx - 3, vpy + 26, 3, 8); // leg1
+                ctx.fillRect(vpx + 1, vpy + 26, 3, 8); // leg2
+                // Charge aura if phase 0 charging
+                if (victoryPhase === 0 && victoryTimer > 40) {
+                    const auraSize = (24 + Math.sin(gameTime * 0.35) * 6) * 2;
+                    const aColor = victoryTimer > 70 ? '#f43f5e' : '#38bdf8';
+                    ctx.fillStyle = aColor;
+                    ctx.globalAlpha = 0.7;
+                    ctx.fillRect(vpx - auraSize/2, vpy + 10 - auraSize/2, auraSize, auraSize);
+                    ctx.clearRect(vpx - auraSize/2 + 4, vpy + 10 - auraSize/2 + 4, auraSize - 8, auraSize - 8);
+                    ctx.globalAlpha = 1.0;
+                }
+                // Robe
+                ctx.fillStyle = '#0d9488';
+                ctx.fillRect(vpx - 8, vpy + 12, 16, 6);
+                ctx.fillStyle = '#06b6d4';
+                ctx.fillRect(vpx - 10, vpy + 18, 20, 8);
+                ctx.fillStyle = '#38bdf8';
+                ctx.fillRect(vpx - 12, vpy + 26, 24, 8);
+                // Stars
+                ctx.fillStyle = '#fde047';
+                ctx.fillRect(vpx - 6, vpy + 14, 4, 4);
+                ctx.fillRect(vpx + 4, vpy + 22, 4, 4);
+                // Eyes (sneezing in phase 0 later / normal otherwise)
+                ctx.fillStyle = '#000000';
+                if (victoryPhase === 0 && victoryTimer > 60) {
+                    ctx.fillRect(vpx - 1, vpy + 4, 2, 2); // squinted
+                    ctx.fillRect(vpx + 3, vpy + 4, 2, 2);
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillRect(vpx - 2, vpy + 2, 4, 2);
+                    ctx.fillRect(vpx + 2, vpy + 2, 4, 2);
+                } else {
+                    ctx.fillRect(vpx - 1, vpy + 4, 2, 4);
+                    ctx.fillRect(vpx + 3, vpy + 4, 2, 4);
+                }
+                // Arms raised in victory for phase 4
+                ctx.fillStyle = '#ffffff';
+                if (victoryPhase >= 3) {
+                    ctx.fillRect(vpx - 14, vpy + 10, 6, 4);
+                    ctx.fillRect(vpx + 8, vpy + 10, 6, 4);
+                } else {
+                    ctx.fillRect(vpx - 8, vpy + 18, 6, 4);
+                    ctx.fillRect(vpx + 2, vpy + 18, 6, 4);
+                }
+                // Cap
+                ctx.fillStyle = '#0d9488';
+                ctx.fillRect(vpx - 6, vpy - 4, 12, 6);
+                ctx.fillRect(vpx - 14, vpy - 10, 8, 6);
+                ctx.fillStyle = '#fef08a';
+                ctx.fillRect(vpx - 18, vpy - 14, 8, 8);
+
+                // Draw nightmare cloud (phases 0-2)
+                if (victoryPhase <= 2) {
+                    ctx.globalAlpha = victoryCloud.alpha;
+                    ctx.save();
+                    ctx.translate(Math.round(victoryCloud.x), Math.round(victoryCloud.y));
+                    ctx.scale(victoryCloud.scaleX, victoryCloud.scaleY);
+                    if (victoryPhase === 2) {
+                        ctx.rotate(victoryCloud.spin);
+                    }
+                    const cr = victoryCloud.r;
+                    // Cloud body
+                    ctx.fillStyle = '#2e1065';
+                    ctx.fillRect(-cr, -20, cr * 2, 40);
+                    ctx.fillRect(-cr * 0.6, -cr * 0.5, cr * 1.2, cr * 0.5);
+                    ctx.fillRect(-cr * 0.8, -40, cr * 0.6, 25);
+                    ctx.fillRect(cr * 0.2, -35, cr * 0.6, 20);
+                    // Dark swirls
+                    ctx.fillStyle = '#4c1d95';
+                    ctx.fillRect(-cr * 0.4, -10, cr * 0.8, 20);
+                    // Nightmare eyes
+                    ctx.fillStyle = '#f43f5e';
+                    ctx.fillRect(-20, -6, 12, 8);
+                    ctx.fillRect(8, -6, 12, 8);
+                    ctx.fillStyle = '#fef08a';
+                    ctx.fillRect(-16, -4, 4, 4);
+                    ctx.fillRect(12, -4, 4, 4);
+                    ctx.restore();
+                    ctx.globalAlpha = 1.0;
+                }
+
+                // Draw star (phases 3+)
+                if (victoryPhase >= 3) {
+                    ctx.globalAlpha = victoryStar.alpha;
+                    ctx.save();
+                    ctx.translate(Math.round(victoryStar.x), Math.round(victoryStar.y));
+                    ctx.rotate(victoryStar.spin);
+                    const sr = victoryStar.r;
+                    // Star: 5-point using fillRect approximation
+                    ctx.fillStyle = '#fef08a';
+                    ctx.fillRect(-4, -sr, 8, sr * 2);
+                    ctx.fillRect(-sr, -4, sr * 2, 8);
+                    ctx.fillRect(-sr * 0.7, -sr * 0.7, sr * 0.6, sr * 0.6);
+                    ctx.fillRect(sr * 0.1, -sr * 0.7, sr * 0.6, sr * 0.6);
+                    ctx.fillRect(-sr * 0.7, sr * 0.1, sr * 0.6, sr * 0.6);
+                    ctx.fillRect(sr * 0.1, sr * 0.1, sr * 0.6, sr * 0.6);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(-3, -sr + 4, 6, sr * 2 - 8);
+                    ctx.restore();
+                    ctx.globalAlpha = 1.0;
+                }
+
+                ctx.restore(); // end shake translate
+
+                // THE END screen
+                if (victoryPhase === 4) {
+                    // Dark overlay
+                    ctx.fillStyle = 'rgba(2,5,16,0.65)';
+                    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+                    ctx.textAlign = 'center';
+                    // Impact-style THE END text with outline
+                    ctx.fillStyle = '#fef08a';
+                    ctx.font = 'bold 88px monospace';
+                    ctx.fillText('THE END', CANVAS_WIDTH/2 + 2, CANVAS_HEIGHT/2 - 60 + 2);
+                    ctx.fillStyle = '#38bdf8';
+                    ctx.fillText('THE END', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 - 60);
+
+                    ctx.fillStyle = '#f1f5f9';
+                    ctx.font = '24px monospace';
+                    ctx.fillText(`Sleep restored! Final Score: ${player.score}`, CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 10);
+                    ctx.fillText('Nightmare King banished to a distant star!', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 46);
+
+                    if (Math.floor(gameTime / 30) % 2 === 0) {
+                        ctx.fillStyle = '#f43f5e';
+                        ctx.font = 'bold 28px monospace';
+                        ctx.fillText('PRESS SNEEZE TO PLAY AGAIN', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 110);
+                    }
+                }
+
+                ctx.restore();
+                return;
+            }
+
+
+            const theme = (levels[currentLevelIndex] && levels[currentLevelIndex].theme) || DEFAULT_THEME;
+
+            ctx.fillStyle = theme.sky[0];
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            if(theme.sky[1]) {
+                ctx.fillStyle = theme.sky[1];
+                ctx.fillRect(0, CANVAS_HEIGHT * 0.4, CANVAS_WIDTH, CANVAS_HEIGHT * 0.6);
+            }
+            if(theme.sky[2]) {
+                ctx.fillStyle = theme.sky[2];
+                ctx.fillRect(0, CANVAS_HEIGHT * 0.7, CANVAS_WIDTH, CANVAS_HEIGHT * 0.3);
+            }
+            if(theme.sky[3]) {
+                ctx.fillStyle = theme.sky[3];
+                ctx.fillRect(0, CANVAS_HEIGHT * 0.9, CANVAS_WIDTH, CANVAS_HEIGHT * 0.1);
+            }
+
+            ctx.fillStyle = theme.moon;
+            const mx = 700, my = 80, mr = 34;
+            ctx.fillRect(mx - mr, my - mr/2, mr*2, mr);
+            ctx.fillRect(mx - mr/2, my - mr, mr, mr*2);
+            ctx.fillRect(mx - mr*0.8, my - mr*0.8, mr*1.6, mr*1.6);
+            
+            ctx.fillStyle = theme.sky[0];
+            ctx.fillRect(mx - mr + 10, my - mr/2 - 10, mr*1.5, mr*1.5);
+
+            ctx.fillStyle = '#0b1020';
+            ctx.fillRect(0, CANVAS_HEIGHT - 70, CANVAS_WIDTH, 70);
+
+            stardustParticles.forEach(p => {
+                ctx.fillStyle = `rgba(224, 242, 254, ${Math.max(0.1, Math.min(1, p.alpha))})`;
+                ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 2);
+            });
+
+            const starCount = theme.starDensity || 40;
+            ctx.fillStyle = '#ffffff';
+            for (let i = 0; i < starCount; i++) {
+                const sx = (i * 47 + gameTime * 0.05) % CANVAS_WIDTH;
+                const sy = (i * 23) % (CANVAS_HEIGHT - 60);
+                if (Math.abs(Math.sin(gameTime * 0.05 + i)) > 0.5) {
+                    ctx.fillRect(Math.round(sx), Math.round(sy), 2, 2);
+                }
+            }
+
+            platforms.forEach(p => {
+                const px = Math.round(p.x), py = Math.round(p.y), pw = Math.round(p.w), ph = Math.round(p.h);
+                if (p.type === 'ground') {
+                    ctx.fillStyle = '#1c1917';
+                    ctx.fillRect(px, py, pw, ph);
+                    ctx.fillStyle = '#365314';
+                    ctx.fillRect(px, py, pw, 8);
+                    ctx.fillStyle = '#4d7c0f';
+                    ctx.fillRect(px, py, pw, 4);
+                    for (let gx = px; gx < px + pw; gx += 16) {
+                        ctx.fillStyle = '#3f6212';
+                        ctx.fillRect(gx + 3, py - 4, 3, 5);
+                        ctx.fillRect(gx + 9, py - 6, 2, 7);
+                    }
+                    ctx.fillStyle = '#44403c';
+                    for (let tx = px; tx < px + pw; tx += 20) ctx.fillRect(tx, py + 12, 18, 2);
+                } else {
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillRect(px, py + 4, pw, ph);
+                    ctx.fillStyle = p.type === 'moving' ? '#1d4ed8' : '#334155';
+                    ctx.fillRect(px, py, pw, ph);
+                    ctx.fillStyle = p.type === 'moving' ? '#7dd3fc' : '#86efac';
+                    ctx.fillRect(px, py, pw, 5);
+                }
+            });
+
+            featherParticles.forEach(f => {
+                ctx.fillStyle = f.color;
+                ctx.globalAlpha = Math.max(0, f.life / f.maxLife);
+                ctx.fillRect(Math.round(f.x - 4), Math.round(f.y - 8), 8, 16);
+                ctx.globalAlpha = 1.0;
+            });
+
+            pillows.forEach(pillow => {
+                if (!pillow.collected) {
+                    const bobY = Math.round(pillow.y + Math.sin(gameTime * 0.09) * 5);
+                    ctx.fillStyle = '#0284c7';
+                    ctx.fillRect(Math.round(pillow.x), bobY, 24, 18);
+                    ctx.fillStyle = '#7dd3fc';
+                    ctx.fillRect(Math.round(pillow.x), bobY, 24, 4);
+                    ctx.fillStyle = '#fef08a';
+                    ctx.fillRect(Math.round(pillow.x + 10), bobY + 7, 4, 4);
+                }
+            });
+
+            alarmClocks.forEach(clock => {
+                const ringOffset = !clock.rung ? Math.round(Math.sin(gameTime * 0.3) * 2.5) : 0;
+                const cx = Math.round(clock.x + ringOffset);
+                const cy = Math.round(clock.y);
+                
+                ctx.fillStyle = clock.rung ? '#64748b' : '#f59e0b';
+                ctx.fillRect(cx - 16, cy - 16, 32, 32);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(cx - 12, cy - 12, 24, 24);
+                
+                ctx.fillStyle = '#0f172a';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'left';
+                ctx.fillText(clock.rung ? 'OFF' : 'RNG', cx - 9, cy + 4);
+            });
+
+            if (boss) {
+                const bx = Math.round(boss.x + Math.sin(gameTime * 0.05) * 22);
+                const by = Math.round(boss.y);
+                const floatY = Math.round(Math.sin(gameTime * 0.1) * 6);
+                const ph = boss.phase || 1;
+                const body = ph === 1 ? '#2e1065' : ph === 2 ? '#7f1d1d' : '#111827';
+                const trim = ph === 1 ? '#4c1d95' : ph === 2 ? '#b91c1c' : '#f43f5e';
+                ctx.fillStyle = '#fbbf24';
+                ctx.fillRect(bx + 20, by - 20 + floatY, 60, 20);
+                ctx.fillRect(bx + 10, by - 30 + floatY, 20, 20);
+                ctx.fillRect(bx + 40, by - 40 + floatY, 20, 28);
+                ctx.fillRect(bx + 70, by - 30 + floatY, 20, 20);
+                ctx.fillStyle = ph === 3 ? '#22d3ee' : '#f43f5e';
+                ctx.fillRect(bx + 46, by - 28 + floatY, 8, 8);
+                ctx.fillStyle = body;
+                ctx.fillRect(bx, by + floatY, 100, 74);
+                ctx.fillStyle = trim;
+                ctx.fillRect(bx - 12, by + 8 + floatY, 12, 58);
+                ctx.fillRect(bx + 100, by + 8 + floatY, 12, 58);
+                if (ph >= 2) {
+                    ctx.fillStyle = '#f97316';
+                    ctx.fillRect(bx - 18, by + 20 + floatY, 8, 40);
+                    ctx.fillRect(bx + 110, by + 20 + floatY, 8, 40);
+                }
+                const wisp1 = Math.round(Math.sin(gameTime * 0.15) * 8);
+                ctx.fillStyle = body;
+                ctx.fillRect(bx + 10, by + 74 + floatY + wisp1, 20, 16);
+                ctx.fillRect(bx + 40, by + 74 + floatY - wisp1, 20, 24);
+                ctx.fillRect(bx + 70, by + 74 + floatY + wisp1, 20, 16);
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(bx + 18, by + 14 + floatY, 64, 42);
+                const angryX = Math.round(Math.cos(gameTime*0.2)*4);
+                ctx.fillStyle = ph === 3 ? '#22d3ee' : '#f43f5e';
+                ctx.fillRect(bx + 26 + angryX, by + 24 + floatY, 18, 14);
+                ctx.fillRect(bx + 56 + angryX, by + 24 + floatY, 18, 14);
+                ctx.fillStyle = '#fef08a';
+                ctx.fillRect(bx + 32 + angryX, by + 28 + floatY, 6, 6);
+                ctx.fillRect(bx + 62 + angryX, by + 28 + floatY, 6, 6);
+                if (ph === 3) {
+                    ctx.fillStyle = '#f43f5e';
+                    ctx.fillRect(bx + 36, by + 44 + floatY, 28, 6);
+                }
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(200, 12, 400, 22);
+                const barCol = ph === 1 ? '#a78bfa' : ph === 2 ? '#fb7185' : '#22d3ee';
+                ctx.fillStyle = barCol;
+                ctx.fillRect(202, 14, Math.max(0, (boss.hp / boss.maxHp) * 396), 18);
+                ctx.fillStyle = '#f8fafc';
+                ctx.font = 'bold 14px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('KING  PHASE ' + ph + '/3', 400, 28);
+            }
+
+            if (goalPost) {
+                ctx.fillStyle = goalPost.unlocked ? '#38bdf8' : '#475569';
+                ctx.fillRect(Math.round(goalPost.x), Math.round(goalPost.y), Math.round(goalPost.w), Math.round(goalPost.h));
+                
+                if (goalPost.unlocked) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(Math.round(goalPost.x + 8), Math.round(goalPost.y + 10), Math.round(goalPost.w - 16), Math.round(goalPost.h - 20));
+                    ctx.fillStyle = '#1e293b';
+                    ctx.font = 'bold 20px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('IN', Math.round(goalPost.x + goalPost.w/2), Math.round(goalPost.y + 35));
+                }
+            }
+
+            enemies.forEach(e => {
+                if (!e.alive) return;
+                const ex = Math.round(e.x);
+                const ey = Math.round(e.y);
+                if (e.flash % 2 === 1) ctx.globalAlpha = 0.45;
+                if (e.stunned > 0 && gameTime % 8 < 4) ctx.globalAlpha = 0.7;
+
+                if (e.type === 'bat') {
+                    const flap = Math.round(Math.sin(gameTime * 0.4) * 7);
+                    ctx.fillStyle = '#0c1222';
+                    ctx.fillRect(ex - 8, ey + 6 + flap, 14, 7);
+                    ctx.fillRect(ex + 20, ey + 6 + flap, 14, 7);
+                    ctx.fillStyle = '#1e3a5f';
+                    ctx.fillRect(ex - 12, ey + 4 + flap * 1.4, 6, 5);
+                    ctx.fillRect(ex + 32, ey + 4 + flap * 1.4, 6, 5);
+                    ctx.fillStyle = '#312e81';
+                    ctx.fillRect(ex + 6, ey + 4, 14, 16);
+                    ctx.fillStyle = '#4c1d95';
+                    ctx.fillRect(ex + 8, ey + 6, 10, 10);
+                    ctx.fillStyle = '#1e1b4b';
+                    ctx.fillRect(ex + 6, ey - 2, 5, 6);
+                    ctx.fillRect(ex + 15, ey - 2, 5, 6);
+                    ctx.fillStyle = '#f43f5e';
+                    ctx.fillRect(ex + 9, ey + 8, 3, 3);
+                    ctx.fillRect(ex + 15, ey + 8, 3, 3);
+                    ctx.fillStyle = '#fef08a';
+                    ctx.fillRect(ex + 10, ey + 9, 1, 1);
+                    ctx.fillRect(ex + 16, ey + 9, 1, 1);
+                    ctx.fillStyle = '#c4b5fd';
+                    ctx.fillRect(ex + 11, ey + 16, 6, 3);
+                } else if (e.type === 'ogre') {
+                    const hopY = Math.round(ey + (e.stunned ? 0 : Math.abs(Math.sin(gameTime * 0.1)) * -3));
+                    ctx.fillStyle = '#3f6212';
+                    ctx.fillRect(ex + 4, hopY + 10, 28, 24);
+                    ctx.fillStyle = '#65a30d';
+                    ctx.fillRect(ex + 6, hopY + 12, 24, 18);
+                    ctx.fillStyle = '#a3e635';
+                    ctx.fillRect(ex + 10, hopY + 14, 16, 8);
+                    ctx.fillStyle = '#365314';
+                    ctx.fillRect(ex + 2, hopY + 6, 10, 10);
+                    ctx.fillRect(ex + 24, hopY + 6, 10, 10);
+                    ctx.fillStyle = '#fef08a';
+                    ctx.fillRect(ex + 6, hopY + 8, 4, 4);
+                    ctx.fillRect(ex + 26, hopY + 8, 4, 4);
+                    ctx.fillStyle = '#7f1d1d';
+                    ctx.fillRect(ex + 12, hopY + 22, 12, 4);
+                    ctx.fillStyle = '#f43f5e';
+                    ctx.fillRect(ex + 10, hopY + 16, 4, 4);
+                    ctx.fillRect(ex + 22, hopY + 16, 4, 4);
+                } else {
+                    const hopY = Math.round(ey + (e.stunned ? 0 : Math.abs(Math.sin(gameTime * 0.14)) * -6));
+                    ctx.fillStyle = '#64748b';
+                    ctx.fillRect(ex, hopY + 8, 26, 16);
+                    ctx.fillStyle = '#cbd5e1';
+                    ctx.fillRect(ex + 3, hopY + 10, 20, 14);
+                    ctx.fillStyle = '#f1f5f9';
+                    ctx.fillRect(ex + 6, hopY + 12, 10, 6);
+                    ctx.fillStyle = '#e2e8f0';
+                    ctx.fillRect(ex - 3, hopY + 14, 5, 5);
+                    ctx.fillRect(ex + 24, hopY + 16, 5, 5);
+                    ctx.fillRect(ex + 10, hopY + 2, 6, 6);
+                    const earTilt = Math.round(Math.sin(gameTime * 0.2) * 2);
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.fillRect(ex + 4 + earTilt, hopY - 6, 5, 12);
+                    ctx.fillRect(ex + 16 - earTilt, hopY - 6, 5, 12);
+                    ctx.fillStyle = '#fda4af';
+                    ctx.fillRect(ex + 5 + earTilt, hopY - 3, 3, 7);
+                    ctx.fillRect(ex + 17 - earTilt, hopY - 3, 3, 7);
+                    ctx.fillStyle = '#f43f5e';
+                    const faceDir = e.vx > 0 ? 1 : -1;
+                    ctx.fillRect(ex + 12 + faceDir * 5, hopY + 14, 5, 5);
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(ex + 13 + faceDir * 5, hopY + 15, 2, 2);
+                }
+                if (e.maxHp > 1) {
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillRect(ex, ey - 6, e.w, 3);
+                    ctx.fillStyle = e.hp === 1 ? '#f43f5e' : '#22c55e';
+                    ctx.fillRect(ex, ey - 6, Math.round(e.w * (e.hp / e.maxHp)), 3);
+                }
+                ctx.globalAlpha = 1;
+            });
+
+            hazards.forEach(hz => {
+                ctx.fillStyle = '#020617';
+                ctx.fillRect(Math.round(hz.x), Math.round(hz.y + hz.h - 4), Math.round(hz.w), 8);
+                ctx.fillStyle = '#fb7185';
+                const spikeCount = Math.max(3, Math.floor(hz.w / 12));
+                const spikeStep = hz.w / spikeCount;
+                for (let s = 0; s < spikeCount; s++) {
+                    const sx = Math.round(hz.x + s * spikeStep);
+                    ctx.fillRect(sx + 2, hz.y + 4, spikeStep - 4, hz.h - 4);
+                    ctx.fillRect(sx + 4, hz.y, spikeStep - 8, 4);
+                }
+            });
+
+            bossProjectiles.forEach(bp => {
+                const px = Math.round(bp.x - bp.r);
+                const py = Math.round(bp.y - bp.r);
+                const k = bp.kind || 'orb';
+                ctx.fillStyle = k === 'rain' ? '#38bdf8' : k === 'nova' ? '#22d3ee' : k === 'shard' ? '#fb7185' : '#c084fc';
+                ctx.fillRect(px, py, bp.r*2, bp.r*2);
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(px + 2, py + 2, Math.max(2, bp.r*2 - 6), Math.max(2, bp.r*2 - 6));
+            });
+
+            player.dashTrail.forEach(t => {
+                ctx.globalAlpha = t.life / 10;
+                ctx.fillStyle = '#67e8f9';
+                ctx.fillRect(Math.round(t.x + 6), Math.round(t.y + 8), 16, 20);
+                ctx.globalAlpha = 1;
+            });
+
+            if (player.invincibleTimer % 4 < 2) {
+                ctx.save();
+                ctx.translate(Math.round(player.x + player.w / 2), Math.round(player.y + player.h / 2));
+                ctx.scale(player.facing * player.scaleX, player.scaleY);
+
+                if (player.isCharging) {
+                    const chargeRatio = player.chargeTimer / player.maxChargeTimer;
+                    ctx.fillStyle = chargeRatio > 0.8 ? '#f43f5e' : '#f59e0b';
+                    const auraSize = Math.round(28 + Math.sin(gameTime * 0.35) * 5);
+                    ctx.fillRect(-auraSize, -auraSize, auraSize * 2, auraSize * 2);
+                    ctx.clearRect(-auraSize + 5, -auraSize + 5, auraSize * 2 - 10, auraSize * 2 - 10);
+                }
+
+                const walk = player.isGrounded && Math.abs(player.vx) > 0.15 ? Math.round(Math.sin(gameTime * 0.4) * 3) : 0;
+                const flap = player.isGliding || player.isDashing ? 6 : 0;
+
+                // slippers
+                ctx.fillStyle = '#312e81';
+                ctx.fillRect(-10 + walk, 15, 9, 6);
+                ctx.fillRect(1 - walk, 15, 9, 6);
+                ctx.fillStyle = '#a5b4fc';
+                ctx.fillRect(-10 + walk, 15, 9, 2);
+                ctx.fillRect(1 - walk, 15, 9, 2);
+
+                // legs — white skin
+                ctx.fillStyle = '#f8fafc';
+                ctx.fillRect(-8 + walk, 8, 6, 9);
+                ctx.fillRect(2 - walk, 8, 6, 9);
+
+                // robes — blueish purple
+                ctx.fillStyle = '#4f46e5';
+                ctx.fillRect(-13, -4, 26, 18);
+                ctx.fillStyle = '#818cf8';
+                ctx.fillRect(-13, -4, 26, 4);
+                ctx.fillStyle = '#3730a3';
+                ctx.fillRect(-13, 10, 26, 4);
+                ctx.fillStyle = '#fde68a';
+                ctx.fillRect(-8, 0, 5, 5);
+                ctx.fillRect(-7, -1, 3, 7);
+                ctx.fillRect(-9, 1, 7, 3);
+                ctx.fillStyle = '#e0e7ff';
+                ctx.fillRect(5, 4, 3, 3);
+                ctx.fillRect(2, 8, 2, 2);
+                ctx.fillStyle = '#c4b5fd';
+                ctx.fillRect(-13, 7, 26, 3);
+                ctx.fillStyle = '#fef9c3';
+                ctx.fillRect(-1, 7, 4, 3);
+
+                // sleeves
+                ctx.fillStyle = '#4f46e5';
+                if (player.isCharging) {
+                    ctx.fillRect(8, -10, 7, 12);
+                    ctx.fillRect(-15, -10, 7, 12);
+                } else if (player.isDashing) {
+                    ctx.fillRect(10, -6, 12, 7);
+                    ctx.fillRect(-16, 0, 8, 6);
+                } else {
+                    ctx.fillRect(10, -1 + flap, 8, 7);
+                    ctx.fillRect(-18, 0 - flap, 8, 7);
+                }
+                ctx.fillStyle = '#f8fafc';
+                if (player.isCharging) {
+                    ctx.fillRect(9, -14, 6, 6);
+                    ctx.fillRect(-15, -14, 6, 6);
+                } else if (player.isDashing) {
+                    ctx.fillRect(20, -6, 6, 6);
+                    ctx.fillRect(-18, 0, 6, 6);
+                } else {
+                    ctx.fillRect(15, 1 + flap, 6, 6);
+                    ctx.fillRect(-20, 1 - flap, 6, 6);
+                }
+
+                // head — white skin
+                ctx.fillStyle = '#cbd5e1';
+                ctx.fillRect(-12, -24, 24, 22);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(-11, -23, 22, 20);
+                ctx.fillStyle = '#e2e8f0';
+                ctx.fillRect(-11, -8, 22, 5);
+                ctx.fillStyle = '#fecdd3';
+                ctx.fillRect(-10, -13, 5, 3);
+                ctx.fillRect(5, -13, 5, 3);
+                ctx.fillStyle = '#9f1239';
+                if (player.isCharging) {
+                    ctx.fillRect(-4, -9, 8, 5);
+                    ctx.fillStyle = '#fda4af';
+                    ctx.fillRect(-3, -8, 6, 3);
+                } else {
+                    ctx.fillRect(-3, -9, 6, 2);
+                }
+                ctx.fillStyle = '#1c1917';
+                if (player.isCharging || player.isDashing) {
+                    ctx.fillRect(-9, -18, 7, 2);
+                    ctx.fillRect(2, -18, 7, 2);
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillRect(-9, -20, 7, 2);
+                    ctx.fillRect(2, -20, 7, 2);
+                } else {
+                    ctx.fillRect(-9, -17, 2, 2);
+                    ctx.fillRect(-7, -19, 5, 2);
+                    ctx.fillRect(-2, -17, 2, 2);
+                    ctx.fillRect(2, -17, 2, 2);
+                    ctx.fillRect(4, -19, 5, 2);
+                    ctx.fillRect(9, -17, 2, 2);
+                }
+
+                // nightcap — royal purple
+                const bob = Math.round(Math.sin(gameTime * 0.12) * 3);
+                ctx.fillStyle = '#4c1d95';
+                ctx.fillRect(-13, -28, 26, 9);
+                ctx.fillStyle = '#6d28d9';
+                ctx.fillRect(-11, -30, 18, 7);
+                ctx.fillStyle = '#c4b5fd';
+                ctx.fillRect(-13, -25, 26, 2);
+                ctx.fillStyle = '#4c1d95';
+                ctx.fillRect(-24, -32 + bob, 14, 9);
+                ctx.fillRect(-30, -36 + bob, 12, 9);
+                ctx.fillStyle = '#facc15';
+                ctx.fillRect(-34, -40 + bob, 12, 12);
+                ctx.fillStyle = '#fffbeb';
+                ctx.fillRect(-31, -37 + bob, 5, 5);
+
+                ctx.restore();
+            }
+
+            shockwaves.forEach(sw => {
+                ctx.fillStyle = sw.color;
+                ctx.globalAlpha = sw.alpha;
+                const r = Math.round(sw.radius);
+                ctx.fillRect(Math.round(sw.x) - r, Math.round(sw.y) - r, r*2, r*2);
+                ctx.clearRect(Math.round(sw.x) - r + 4, Math.round(sw.y) - r + 4, r*2 - 8, r*2 - 8);
+                ctx.globalAlpha = 1.0;
+            });
+
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                if (p.maxLife) ctx.globalAlpha = p.life / p.maxLife;
+                const s = Math.round(p.size || 6);
+                ctx.fillRect(Math.round(p.x - s/2), Math.round(p.y - s/2), s, s);
+                ctx.globalAlpha = 1.0;
+            });
+
+            zzzParticles.forEach(z => {
+                ctx.fillStyle = '#e0f2fe';
+                ctx.font = 'bold 24px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('Z', Math.round(z.x), Math.round(z.y));
+            });
+
+            floatingTexts.forEach(ft => {
+                ctx.fillStyle = ft.color;
+                ctx.font = 'bold 20px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(ft.text, Math.round(ft.x), Math.round(ft.y));
+            });
+
+            if (player.isCharging || player.sneezeEnergy < player.maxSneezeEnergy) {
+                const barW = 38;
+                const barH = 6;
+                const bx = Math.round(player.x + player.w / 2 - barW / 2);
+                const by = Math.round(player.y - 20);
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(bx, by, barW, barH);
+                if (player.isCharging) {
+                    const chargeRatio = player.chargeTimer / player.maxChargeTimer;
+                    ctx.fillStyle = chargeRatio > 0.8 ? '#f43f5e' : '#f59e0b';
+                    ctx.fillRect(bx, by, Math.round(barW * chargeRatio), barH);
+                } else {
+                    const energyRatio = player.sneezeEnergy / player.maxSneezeEnergy;
+                    ctx.fillStyle = '#38bdf8';
+                    ctx.fillRect(bx, by, Math.round(barW * energyRatio), barH);
+                }
+            }
+
+            const lx = player.x + player.w / 2;
+            const ly = player.y + player.h / 2;
+            const shade = ctx.createRadialGradient(lx, ly, 40, lx, ly, 280);
+            shade.addColorStop(0, 'rgba(0, 0, 0, 0)');
+            shade.addColorStop(0.45, 'rgba(8, 10, 28, 0.08)');
+            shade.addColorStop(1, 'rgba(8, 10, 28, 0.22)');
+            ctx.fillStyle = shade;
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            ctx.globalCompositeOperation = 'lighter';
+            const glow = ctx.createRadialGradient(lx, ly, 6, lx, ly, 110);
+            glow.addColorStop(0, 'rgba(200, 210, 255, 0.10)');
+            glow.addColorStop(0.55, 'rgba(160, 170, 255, 0.04)');
+            glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(lx, ly, 110, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalCompositeOperation = 'source-over';
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '16px monospace';
+            ctx.textAlign = 'left';
+            const lvl = levels[currentLevelIndex];
+            ctx.fillText(`Chap ${currentLevelIndex + 1}: ${lvl.title}`, 20, 30);
+            ctx.fillStyle = '#f43f5e';
+            ctx.fillText(`LIVES: ${player.health}`, 20, 60);
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText(`PILLOWS: ${player.pillowsCollected}/${lvl.pillowsTotal}`, 180, 60);
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillText(`SCORE: ${player.score}`, 380, 60);
+            if (sound.muted) {
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillText(`MUTED (Press M)`, CANVAS_WIDTH - 200, 30);
+            }
+
+            if (currentGameState === STATE.MODAL) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+                ctx.fillStyle = '#38bdf8';
+                ctx.font = 'bold 48px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(modalData.title, CANVAS_WIDTH/2, CANVAS_HEIGHT/2 - 40);
+                
+                ctx.fillStyle = '#f1f5f9';
+                ctx.font = '24px monospace';
+                wrapText(ctx, modalData.story, CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 20, 600, 32);
+                
+                if (Math.floor(gameTime / 30) % 2 === 0) {
+                    ctx.fillStyle = '#f43f5e';
+                    ctx.font = 'bold 32px monospace';
+                    ctx.fillText('PRESS SNEEZE TO CONTINUE', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 150);
+                }
+            }
+
+            ctx.restore();
+        }
+
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        requestAnimationFrame(gameLoop);
+    </script>
 </body>
 </html>

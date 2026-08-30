@@ -30,10 +30,26 @@
             image-rendering: crisp-edges;
             image-rendering: pixelated;
         }
+
+        .scanlines {
+            pointer-events: none;
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                to bottom,
+                rgba(18, 16, 40, 0.0) 0px,
+                rgba(18, 16, 40, 0.0) 2px,
+                rgba(0, 0, 0, 0.11) 2px,
+                rgba(0, 0, 0, 0.11) 3px
+            );
+            mix-blend-mode: multiply;
+            z-index: 5;
+        }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas" width="400" height="225"></canvas>
+    <div class="scanlines"></div>
     
     <script>
         class SoundFX {
@@ -2103,6 +2119,25 @@
                     ctx.fillRect(bx, by, Math.round(barW * energyRatio), barH);
                 }
             }
+
+            const lx = player.x + player.w / 2;
+            const ly = player.y + player.h / 2;
+            const shade = ctx.createRadialGradient(lx, ly, 40, lx, ly, 280);
+            shade.addColorStop(0, 'rgba(0, 0, 0, 0)');
+            shade.addColorStop(0.45, 'rgba(8, 10, 28, 0.08)');
+            shade.addColorStop(1, 'rgba(8, 10, 28, 0.22)');
+            ctx.fillStyle = shade;
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            ctx.globalCompositeOperation = 'lighter';
+            const glow = ctx.createRadialGradient(lx, ly, 6, lx, ly, 110);
+            glow.addColorStop(0, 'rgba(200, 210, 255, 0.10)');
+            glow.addColorStop(0.55, 'rgba(160, 170, 255, 0.04)');
+            glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(lx, ly, 110, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalCompositeOperation = 'source-over';
 
             ctx.fillStyle = '#ffffff';
             ctx.font = '16px monospace';
