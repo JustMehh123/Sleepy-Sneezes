@@ -1,7 +1,22 @@
-# Sleepy-Sneezes
+# Sleepy Sneezes
 
-Pixel platformer. Open `index.html`.
+Arcade pixel platformer. Serve the folder (any static HTTP server) and open it — no build step.
 
-**Move** WASD / arrows · **Sneeze** Shift / E · **Dash** F / Ctrl / J (any direction except straight down)
+```
+python3 -m http.server 8080
+```
 
-Dash kills weak foes, stuns strong ones, and FINISHES low-HP enemies with a black/white anime impact frame.
+Then open the site. **Shift/E** sneeze · **F** dash · **WASD** move.
+
+```
+assets/sprites/   player, enemies, tiles, boss sheets
+css/arcade.css    CRT scanlines + cabinet frame
+js/engine.js      loop, input, lighting
+js/game.js        gameplay
+js/levels.js      stages
+js/audio.js       SFX
+js/main.js        boot
+tools/make_sprites.py  rebuild sheets
+```
+
+The world stays dim; Sleepyhead carries a lantern radius. Scanlines sit on top like a cabinet CRT.
