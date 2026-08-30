@@ -1948,125 +1948,165 @@
 
             if (player.invincibleTimer % 4 < 2) {
                 ctx.save();
-                ctx.translate(Math.round(player.x + player.w / 2), Math.round(player.y + player.h / 2));
+                ctx.translate(Math.round(player.x + player.w / 2), Math.round(player.y + player.h / 2 + 2));
                 ctx.scale(player.facing * player.scaleX, player.scaleY);
 
+                const moving = player.isGrounded && Math.abs(player.vx) > 0.2;
+                const swing = moving ? Math.sin(gameTime * 0.45) : 0;
+                const walk = moving ? Math.round(swing * 4) : 0;
+                const armSwing = moving ? Math.round(swing * 6) : 0;
+                const glide = player.isGliding;
+                const chargeRatio = player.isCharging ? player.chargeTimer / player.maxChargeTimer : 0;
+
                 if (player.isCharging) {
-                    const chargeRatio = player.chargeTimer / player.maxChargeTimer;
-                    ctx.fillStyle = chargeRatio > 0.8 ? '#f43f5e' : '#f59e0b';
-                    const auraSize = Math.round(28 + Math.sin(gameTime * 0.35) * 5);
-                    ctx.fillRect(-auraSize, -auraSize, auraSize * 2, auraSize * 2);
-                    ctx.clearRect(-auraSize + 5, -auraSize + 5, auraSize * 2 - 10, auraSize * 2 - 10);
+                    ctx.fillStyle = chargeRatio > 0.8 ? 'rgba(196,181,253,0.35)' : 'rgba(165,180,252,0.25)';
+                    const auraSize = Math.round(16 + chargeRatio * 10 + Math.sin(gameTime * 0.4) * 3);
+                    ctx.fillRect(-auraSize, -auraSize - 8, auraSize * 2, auraSize * 2);
                 }
 
-                const walk = player.isGrounded && Math.abs(player.vx) > 0.15 ? Math.round(Math.sin(gameTime * 0.4) * 3) : 0;
-                const flap = player.isGliding || player.isDashing ? 6 : 0;
-
-                // slippers
+                // legs + slippers (skinny)
+                const legY = glide ? 12 : 10;
+                ctx.fillStyle = '#f8fafc';
+                ctx.fillRect(-6 + walk, legY, 4, glide ? 6 : 10);
+                ctx.fillRect(2 - walk, legY, 4, glide ? 6 : 10);
                 ctx.fillStyle = '#312e81';
-                ctx.fillRect(-10 + walk, 15, 9, 6);
-                ctx.fillRect(1 - walk, 15, 9, 6);
+                ctx.fillRect(-7 + walk, legY + (glide ? 5 : 9), 6, 4);
+                ctx.fillRect(1 - walk, legY + (glide ? 5 : 9), 6, 4);
                 ctx.fillStyle = '#a5b4fc';
-                ctx.fillRect(-10 + walk, 15, 9, 2);
-                ctx.fillRect(1 - walk, 15, 9, 2);
+                ctx.fillRect(-7 + walk, legY + (glide ? 5 : 9), 6, 1);
+                ctx.fillRect(1 - walk, legY + (glide ? 5 : 9), 6, 1);
 
-                // legs — white skin
-                ctx.fillStyle = '#f8fafc';
-                ctx.fillRect(-8 + walk, 8, 6, 9);
-                ctx.fillRect(2 - walk, 8, 6, 9);
-
-                // robes — blueish purple
-                ctx.fillStyle = '#4f46e5';
-                ctx.fillRect(-13, -4, 26, 18);
-                ctx.fillStyle = '#818cf8';
-                ctx.fillRect(-13, -4, 26, 4);
-                ctx.fillStyle = '#3730a3';
-                ctx.fillRect(-13, 10, 26, 4);
-                ctx.fillStyle = '#fde68a';
-                ctx.fillRect(-8, 0, 5, 5);
-                ctx.fillRect(-7, -1, 3, 7);
-                ctx.fillRect(-9, 1, 7, 3);
-                ctx.fillStyle = '#e0e7ff';
-                ctx.fillRect(5, 4, 3, 3);
-                ctx.fillRect(2, 8, 2, 2);
-                ctx.fillStyle = '#c4b5fd';
-                ctx.fillRect(-13, 7, 26, 3);
-                ctx.fillStyle = '#fef9c3';
-                ctx.fillRect(-1, 7, 4, 3);
-
-                // sleeves
-                ctx.fillStyle = '#4f46e5';
-                if (player.isCharging) {
-                    ctx.fillRect(8, -10, 7, 12);
-                    ctx.fillRect(-15, -10, 7, 12);
-                } else if (player.isDashing) {
-                    ctx.fillRect(10, -6, 12, 7);
-                    ctx.fillRect(-16, 0, 8, 6);
+                // robe — slim, or puffed parachute while gliding
+                if (glide) {
+                    ctx.fillStyle = '#3730a3';
+                    ctx.fillRect(-20, 2, 40, 8);
+                    ctx.fillStyle = '#4f46e5';
+                    ctx.fillRect(-22, 8, 44, 6);
+                    ctx.fillStyle = '#818cf8';
+                    ctx.fillRect(-18, -2, 36, 6);
+                    ctx.fillStyle = '#c4b5fd';
+                    ctx.fillRect(-16, 10, 8, 4);
+                    ctx.fillRect(8, 10, 8, 4);
+                    ctx.fillStyle = '#fde68a';
+                    ctx.fillRect(-6, 2, 5, 5);
                 } else {
-                    ctx.fillRect(10, -1 + flap, 8, 7);
-                    ctx.fillRect(-18, 0 - flap, 8, 7);
-                }
-                ctx.fillStyle = '#f8fafc';
-                if (player.isCharging) {
-                    ctx.fillRect(9, -14, 6, 6);
-                    ctx.fillRect(-15, -14, 6, 6);
-                } else if (player.isDashing) {
-                    ctx.fillRect(20, -6, 6, 6);
-                    ctx.fillRect(-18, 0, 6, 6);
-                } else {
-                    ctx.fillRect(15, 1 + flap, 6, 6);
-                    ctx.fillRect(-20, 1 - flap, 6, 6);
+                    ctx.fillStyle = '#4f46e5';
+                    ctx.fillRect(-9, -2, 18, 16);
+                    ctx.fillStyle = '#818cf8';
+                    ctx.fillRect(-9, -2, 18, 3);
+                    ctx.fillStyle = '#3730a3';
+                    ctx.fillRect(-9, 11, 18, 3);
+                    ctx.fillStyle = '#fde68a';
+                    ctx.fillRect(-6, 2, 5, 5);
+                    ctx.fillRect(-5, 1, 3, 7);
+                    ctx.fillRect(-7, 3, 7, 3);
+                    ctx.fillStyle = '#e0e7ff';
+                    ctx.fillRect(3, 5, 2, 2);
+                    ctx.fillStyle = '#c4b5fd';
+                    ctx.fillRect(-9, 8, 18, 2);
+                    ctx.fillStyle = '#fef9c3';
+                    ctx.fillRect(-1, 8, 3, 2);
                 }
 
-                // head — white skin
+                // arms swing opposite the legs
+                ctx.fillStyle = '#4f46e5';
+                ctx.fillStyle = '#f8fafc';
+                if (player.isCharging) {
+                    ctx.fillStyle = '#4f46e5';
+                    ctx.fillRect(6, -2, 5, 10);
+                    ctx.fillRect(-12, -2, 5, 10);
+                    ctx.fillStyle = '#f8fafc';
+                    ctx.fillRect(7, 7, 4, 4);
+                    ctx.fillRect(-12, 7, 4, 4);
+                } else if (player.isDashing) {
+                    ctx.fillStyle = '#4f46e5';
+                    ctx.fillRect(8, 0, 12, 4);
+                    ctx.fillRect(-14, 2, 8, 4);
+                    ctx.fillStyle = '#f8fafc';
+                    ctx.fillRect(18, 0, 4, 4);
+                    ctx.fillRect(-16, 2, 4, 4);
+                } else if (glide) {
+                    ctx.fillStyle = '#4f46e5';
+                    ctx.fillRect(10, -4, 10, 4);
+                    ctx.fillRect(-20, -4, 10, 4);
+                    ctx.fillStyle = '#f8fafc';
+                    ctx.fillRect(18, -5, 4, 4);
+                    ctx.fillRect(-22, -5, 4, 4);
+                } else {
+                    ctx.fillStyle = '#4f46e5';
+                    ctx.fillRect(7, 1 - armSwing, 5, 8);
+                    ctx.fillRect(-13, 1 + armSwing, 5, 8);
+                    ctx.fillStyle = '#f8fafc';
+                    ctx.fillRect(8, 8 - armSwing, 4, 4);
+                    ctx.fillRect(-13, 8 + armSwing, 4, 4);
+                }
+
+                // head — smaller, white
                 ctx.fillStyle = '#cbd5e1';
-                ctx.fillRect(-12, -24, 24, 22);
+                ctx.fillRect(-9, -22, 18, 18);
                 ctx.fillStyle = '#ffffff';
-                ctx.fillRect(-11, -23, 22, 20);
-                ctx.fillStyle = '#e2e8f0';
-                ctx.fillRect(-11, -8, 22, 5);
+                ctx.fillRect(-8, -21, 16, 16);
                 ctx.fillStyle = '#fecdd3';
-                ctx.fillRect(-10, -13, 5, 3);
-                ctx.fillRect(5, -13, 5, 3);
-                ctx.fillStyle = '#9f1239';
-                if (player.isCharging) {
-                    ctx.fillRect(-4, -9, 8, 5);
-                    ctx.fillStyle = '#fda4af';
-                    ctx.fillRect(-3, -8, 6, 3);
-                } else {
-                    ctx.fillRect(-3, -9, 6, 2);
-                }
+                ctx.fillRect(-7, -12, 3, 2);
+                ctx.fillRect(4, -12, 3, 2);
+
                 ctx.fillStyle = '#1c1917';
-                if (player.isCharging || player.isDashing) {
-                    ctx.fillRect(-9, -18, 7, 2);
-                    ctx.fillRect(2, -18, 7, 2);
-                    ctx.fillStyle = '#ef4444';
-                    ctx.fillRect(-9, -20, 7, 2);
-                    ctx.fillRect(2, -20, 7, 2);
+                if (player.isCharging) {
+                    // cute squint, puffed cheeks — not devil brows
+                    ctx.fillRect(-6, -16, 5, 2);
+                    ctx.fillRect(1, -16, 5, 2);
+                    ctx.fillStyle = '#fda4af';
+                    ctx.fillRect(-8, -13, 4, 3);
+                    ctx.fillRect(4, -13, 4, 3);
+                    ctx.fillStyle = '#9f1239';
+                    ctx.fillRect(-2, -10, 4, 3);
+                    ctx.fillStyle = '#fda4af';
+                    ctx.fillRect(-1, -9, 2, 2);
+                } else if (player.isDashing) {
+                    ctx.fillRect(-6, -16, 4, 2);
+                    ctx.fillRect(2, -16, 4, 2);
+                    ctx.fillStyle = '#9f1239';
+                    ctx.fillRect(-1, -10, 3, 2);
                 } else {
-                    ctx.fillRect(-9, -17, 2, 2);
-                    ctx.fillRect(-7, -19, 5, 2);
-                    ctx.fillRect(-2, -17, 2, 2);
-                    ctx.fillRect(2, -17, 2, 2);
-                    ctx.fillRect(4, -19, 5, 2);
-                    ctx.fillRect(9, -17, 2, 2);
+                    ctx.fillRect(-6, -16, 2, 2);
+                    ctx.fillRect(-4, -17, 3, 2);
+                    ctx.fillRect(-1, -16, 2, 2);
+                    ctx.fillRect(2, -16, 2, 2);
+                    ctx.fillRect(4, -17, 3, 2);
+                    ctx.fillRect(7, -16, 2, 2);
+                    ctx.fillStyle = '#9f1239';
+                    ctx.fillRect(-1, -10, 3, 2);
                 }
 
-                // nightcap — royal purple
-                const bob = Math.round(Math.sin(gameTime * 0.12) * 3);
-                ctx.fillStyle = '#4c1d95';
-                ctx.fillRect(-13, -28, 26, 9);
-                ctx.fillStyle = '#6d28d9';
-                ctx.fillRect(-11, -30, 18, 7);
-                ctx.fillStyle = '#c4b5fd';
-                ctx.fillRect(-13, -25, 26, 2);
-                ctx.fillStyle = '#4c1d95';
-                ctx.fillRect(-24, -32 + bob, 14, 9);
-                ctx.fillRect(-30, -36 + bob, 12, 9);
+                // nightcap — indigo, smaller
+                const bob = Math.round(Math.sin(gameTime * 0.14) * 2);
+                ctx.fillStyle = '#4338ca';
+                ctx.fillRect(-10, -26, 20, 7);
+                ctx.fillStyle = '#6366f1';
+                ctx.fillRect(-8, -28, 14, 5);
+                ctx.fillStyle = '#a5b4fc';
+                ctx.fillRect(-10, -23, 20, 2);
+                ctx.fillStyle = '#4338ca';
+                ctx.fillRect(-18, -30 + bob, 10, 6);
+                ctx.fillRect(-24, -33 + bob, 8, 6);
                 ctx.fillStyle = '#facc15';
-                ctx.fillRect(-34, -40 + bob, 12, 12);
+                ctx.fillRect(-28, -36 + bob, 8, 8);
                 ctx.fillStyle = '#fffbeb';
-                ctx.fillRect(-31, -37 + bob, 5, 5);
+                ctx.fillRect(-26, -34 + bob, 3, 3);
+
+                // sneeze bubble from nose — bobs, grows while charging
+                const bPulse = Math.sin(gameTime * 0.12);
+                const bSize = player.isCharging
+                    ? Math.round(4 + chargeRatio * 10 + Math.abs(bPulse) * 2)
+                    : Math.round(3 + (bPulse + 1) * 1.2);
+                const bY = -12 + Math.round(bPulse * (player.isCharging ? 5 : 3));
+                const bX = 7;
+                ctx.fillStyle = 'rgba(196, 230, 255, 0.75)';
+                ctx.fillRect(bX, bY, bSize, bSize);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.fillRect(bX + 1, bY + 1, Math.max(1, bSize - 3), Math.max(1, Math.floor(bSize / 3)));
+                ctx.fillStyle = 'rgba(165, 180, 252, 0.8)';
+                ctx.fillRect(bX + bSize - 1, bY + bSize - 1, 1, 1);
 
                 ctx.restore();
             }
