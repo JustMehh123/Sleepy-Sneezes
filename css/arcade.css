@@ -1,0 +1,65 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #02010a;
+    color: #c7d2fe;
+}
+
+#stage {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#game {
+    width: min(100vw, calc(100vh * 16 / 9));
+    height: min(100vh, calc(100vw * 9 / 16));
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    background: #05040c;
+    box-shadow:
+        0 0 0 6px #1e1b4b,
+        0 0 0 10px #312e81,
+        0 0 80px #312e81aa;
+    border-radius: 8px;
+}
+
+.scanlines, .crt {
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+}
+
+.scanlines {
+    background: repeating-linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.18) 0px,
+        rgba(0, 0, 0, 0.18) 1px,
+        transparent 1px,
+        transparent 3px
+    );
+    mix-blend-mode: multiply;
+}
+
+.crt {
+    background:
+        radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.55) 100%);
+}
+
+.arcade-label {
+    position: fixed;
+    bottom: 10px;
+    width: 100%;
+    text-align: center;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    color: #6366f1;
+    text-shadow: 0 0 8px #818cf8;
+    pointer-events: none;
+}
