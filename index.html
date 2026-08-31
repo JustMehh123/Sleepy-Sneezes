@@ -231,7 +231,7 @@
         let impactFrame = {
             active: false,
             timer: 0,
-            duration: 48,
+            duration: 56,
             px: 0, py: 0, ex: 0, ey: 0,
             flyX: 0, flyY: 0, flyVX: 0, flyVY: 0,
             kanji: '斬'
@@ -888,8 +888,9 @@
             impactFrame.ey = e.y + e.h / 2;
             impactFrame.flyX = e.x;
             impactFrame.flyY = e.y;
-            impactFrame.flyVX = player.dashDirX * 14;
-            impactFrame.flyVY = player.dashDirY * 10 - 4;
+            impactFrame.flyVX = (player.dashDirX || player.facing) * 16;
+            impactFrame.flyVY = (player.dashDirY || -1) * 9 - 6;
+            impactFrame.flyRot = 0;
             impactFrame.kanji = KANJI_POOL[Math.floor(Math.random() * KANJI_POOL.length)];
             sound.executeSound();
             screenShake.trigger(18);
@@ -1371,8 +1372,22 @@
                         color: i % 3 === 0 ? '#fef08a' : i % 3 === 1 ? '#38bdf8' : '#c084fc'
                     });
                 }
-                spawnFloatingText(player.x + player.w/2 - 30, player.y - 10, 'GROUND POUND!', '#fde047');
+                spawnFloatingText(player.x + player.w/2 - 30, player.y - 10, 'DROP KICK!', '#fde047');
                 sound.hitSound();
+                let kicked = null;
+                enemies.forEach(e => {
+                    if (!e.alive) return;
+                    const dist = Math.hypot((player.x + player.w/2) - (e.x + e.w/2), (player.y + player.h) - (e.y + e.h/2));
+                    if (dist < 110 && (!kicked || dist < kicked.d)) kicked = { e, d: dist };
+                });
+                if (kicked) {
+                    kicked.e.alive = false;
+                    player.score += 400;
+                    spawnFloatingText(kicked.e.x, kicked.e.y - 18, 'FINISH!', '#fde047');
+                    player.dashDirX = player.facing;
+                    player.dashDirY = -1;
+                    triggerImpactFrame(kicked.e);
+                }
             }
 
             if (boss) {
@@ -1821,6 +1836,14 @@
 
             const theme = (levels[currentLevelIndex] && levels[currentLevelIndex].theme) || DEFAULT_THEME;
 
+            if (impactFrame.active) {
+                const cx = impactFrame.px;
+                const cy = impactFrame.py;
+                ctx.translate(cx, cy);
+                ctx.scale(1.9, 1.9);
+                ctx.translate(-cx, -cy);
+            }
+
             ctx.fillStyle = theme.sky[0];
             ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
             
@@ -1862,6 +1885,39 @@
                 if (Math.abs(Math.sin(gameTime * 0.05 + i)) > 0.5) {
                     ctx.fillRect(Math.round(sx), Math.round(sy), 2, 2);
                 }
+            }
+
+            if (boss && boss.name === 'duchess') {
+                const bx = Math.round(220 + Math.sin(gameTime * 0.03) * 18);
+                const by = Math.round(8 + Math.sin(gameTime * 0.05) * 8);
+                ctx.fillStyle = 'rgba(80, 20, 50, 0.45)';
+                ctx.fillRect(bx + 40, by + 210, 300, 24);
+                ctx.fillStyle = '#9d174d';
+                ctx.fillRect(bx + 30, by + 70, 280, 160);
+                ctx.fillStyle = '#f9a8d4';
+                ctx.fillRect(bx + 50, by + 86, 240, 130);
+                ctx.fillStyle = '#fbcfe8';
+                ctx.fillRect(bx + 80, by + 100, 180, 90);
+                ctx.fillStyle = '#be185d';
+                ctx.fillRect(bx + 70, by + 8, 200, 80);
+                ctx.fillStyle = '#f472b6';
+                ctx.fillRect(bx + 110, by - 10, 120, 48);
+                ctx.fillStyle = '#fde68a';
+                ctx.fillRect(bx + 152, by + 4, 36, 16);
+                ctx.fillStyle = '#4c0519';
+                ctx.fillRect(bx + 100, by + 118, 36, 36);
+                ctx.fillRect(bx + 200, by + 118, 36, 36);
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(bx + 110, by + 128, 14, 14);
+                ctx.fillRect(bx + 210, by + 128, 14, 14);
+                ctx.fillStyle = '#9f1239';
+                ctx.fillRect(bx + 140, by + 168, 56, 18);
+                ctx.fillStyle = '#831843';
+                ctx.fillRect(bx + 8, by + 150, 50, 70);
+                ctx.fillRect(bx + 282, by + 150, 50, 70);
+                ctx.fillStyle = '#f472b6';
+                ctx.fillRect(bx + 18, by + 200, 40, 28);
+                ctx.fillRect(bx + 282, by + 200, 40, 28);
             }
 
             platforms.forEach(p => {
@@ -2434,6 +2490,28 @@
                     ctx.fillStyle = '#38bdf8';
                     ctx.fillRect(bx, by, Math.round(barW * energyRatio), barH);
                 }
+            }
+
+            if (impactFrame.active) {
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(-600, -600, 2000, 1600);
+                ctx.fillStyle = '#000000';
+                platforms.forEach(p => {
+                    ctx.fillRect(Math.round(p.x), Math.round(p.y), Math.round(p.w), Math.round(p.h));
+                });
+                ctx.fillRect(Math.round(player.x), Math.round(player.y), player.w, player.h);
+                ctx.fillRect(Math.round(player.x - 8), Math.round(player.y + 8), 8, 8);
+                ctx.fillRect(Math.round(player.x + player.w), Math.round(player.y + 8), 8, 8);
+                enemies.forEach(e => {
+                    if (!e.alive) return;
+                    ctx.fillRect(Math.round(e.x), Math.round(e.y), e.w, e.h);
+                });
+                ctx.save();
+                ctx.translate(Math.round(impactFrame.flyX + 16), Math.round(impactFrame.flyY + 12));
+                ctx.rotate(impactFrame.flyRot || 0);
+                ctx.fillRect(-18, -14, 36, 28);
+                ctx.fillRect(-10, -22, 20, 10);
+                ctx.restore();
             }
 
             const lx = player.x + player.w / 2;
