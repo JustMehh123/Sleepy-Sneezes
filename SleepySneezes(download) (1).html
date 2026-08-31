@@ -639,7 +639,10 @@
                     enemies = [];
                     hazards = [];
                     bossProjectiles = [];
-                    boss = { x: 330, y: 300, w: 90, h: 90, vx: 1.1, hp: 160, maxHp: 160, attackTimer: 70, name: 'duchess', phase: 1, grounded: true };
+                    boss = {
+                        x: 250, y: 20, w: 300, h: 180, vx: 0.4, hp: 200, maxHp: 200,
+                        attackTimer: 50, name: 'duchess', phase: 1, arena: 'cloud', limbs: []
+                    };
                     goalPost = null;
                 }
             },
@@ -945,9 +948,11 @@
             player.sneezeCooldownTimer = player.maxSneezeCooldown;
 
             const recoilMult = 1.0 + chargeRatio * 1.8;
-            player.vx = -player.facing * player.recoilBase * recoilMult;
-            player.vy = -player.recoilBase * (0.8 + chargeRatio * 1.0);
-            player.isGrounded = false;
+            player.vx = -player.facing * player.recoilBase * recoilMult * (player.cloudMode ? 0.35 : 1);
+            if (!player.cloudMode) {
+                player.vy = -player.recoilBase * (0.8 + chargeRatio * 1.0);
+                player.isGrounded = false;
+            }
             player.isSlamming = false;
 
             player.scaleX = 1.6;
@@ -1067,6 +1072,13 @@
                 boss.hp = Math.floor(boss.maxHp * Dd.bossHp);
                 boss.maxHp = boss.hp;
             }
+            player.cloudMode = !!(boss && boss.arena === 'cloud');
+            if (player.cloudMode) {
+                player.x = 90;
+                player.y = 210;
+                player.vx = 0;
+                player.vy = 0;
+            }
             currentGameState = STATE.PLAYING;
         }
 
@@ -1136,7 +1148,9 @@
                     victoryCloud.x += Math.cos(victoryCloud.spin) * 4;
                     victoryCloud.y -= 1.5;
                     if (victoryTimer > 80) { victoryPhase = 3; victoryTimer = 0; victoryStar.x = victoryCloud.x; victoryStar.y = victoryCloud.y; }
-                } else if (victoryPhase === 3)Timer / 30);
+                } else if (victoryPhase === 3) {
+                    victoryStar.r = Math.min(30, victoryStar.r + 1);
+                    victoryStar.alpha = Math.min(1, victoryTimer / 30);
                     victoryStar.spin += 0.05;
                     if (victoryTimer > 60) { victoryPhase = 4; victoryTimer = 0; }
                 } else if (victoryPhase === 4) {
@@ -1223,6 +1237,13 @@
                     player.vx *= 0.4;
                     player.vy *= 0.35;
                 }
+            } else if (player.cloudMode) {
+                const fly = player.isCharging ? 2.6 : 4.4;
+                let fy = 0;
+                if (keys.Up) fy -= fly;
+                if (keys.Down) fy += fly;
+                player.vx += (accel * (player.isCharging ? 0.5 : 1) - player.vx) * 0.18;
+                player.vy += (fy - player.vy) * 0.18;
             } else {
                 const chargeSpeedMult = player.isCharging ? 0.5 : 1.0;
                 player.vx += (accel * chargeSpeedMult - player.vx) * 0.22;
@@ -1242,7 +1263,7 @@
                 if (player.coyoteTimer > 0) player.coyoteTimer--;
             }
 
-            if (keys.Up && !player.isDashing) {
+            if (keys.Up && !player.isDashing && !player.cloudMode) {
                 if (player.coyoteTimer > 0) {
                     player.vy = -7.8;
                     player.isGrounded = false;
@@ -1258,7 +1279,7 @@
                 player.isGliding = false;
             }
 
-            if (!player.isGrounded && !player.isDashing) {
+            if (!player.isGrounded && !player.isDashing && !player.cloudMode) {
                 player.vy += player.gravity;
             }
 
@@ -1284,7 +1305,7 @@
                     }
                 }
                 // Skip collision if player is dropping through
-                if (player.dropTimer > 0) return;
+                if (player.dropTimer > 0 || player.cloudMode) return;
                 if (player.x + player.w > p.x && player.x < p.x + p.w) {
                     if (prevY + player.h <= p.y + 10 && player.y + player.h >= p.y && player.vy >= 0) {
                         player.y = p.y - player.h;
@@ -1346,10 +1367,7 @@
                     spawnFloatingText(CANVAS_WIDTH/2 - 40, 80, 'PHASE ' + boss.phase + '!', '#f43f5e');
                     sound.executeSound();
                     if (boss.name === 'duchess') {
-                        if (boss.phase === 2) {
-                            enemies.push(makeEnemy(80, 380, 0.8, 20, 300, 'slime'));
-                            enemies.push(makeEnemy(680, 380, -0.8, 500, 780, 'slime'));
-                        }
+                        /* keep the sky clear — extra limbs in phase 2 */
                     } else {
                         if (boss.phase === 2) {
                             enemies.push(makeEnemy(120, 80, 0.9, 40, 300, 'bat', { baseY: 80 }));
@@ -1362,9 +1380,8 @@
                     }
                 }
                 if (boss.name === 'duchess') {
-                    boss.x += boss.vx * (boss.phase === 1 ? 1.2 : 1.8);
-                    if (boss.x <= 40 || boss.x + boss.w >= 760) boss.vx = -boss.vx;
-                    boss.y = 310;
+                    boss.x += boss.vx;
+                    if (boss.x <= 180 || boss.x + 80 >= 520) boss.vx = -boss.vx;
                 } else {
                     const speedMult = boss.phase === 1 ? 1.0 : boss.phase === 2 ? 1.6 : 2.2;
                     boss.x += boss.vx * speedMult;
@@ -1469,6 +1486,7 @@
 
             if (boss) {
                 const phase2 = boss.hp < boss.maxHp * 0.5;
+                if (!boss.limbs) boss.limbs = [];
                 boss.attackTimer--;
                 if (boss.attackTimer <= 0) {
                     const bx = boss.x + Math.sin(gameTime * 0.05) * 22 + boss.w / 2;
@@ -1476,16 +1494,62 @@
                     const dx = (player.x + player.w / 2) - bx;
                     const dy = (player.y + player.h / 2) - by;
                     const dist = Math.max(1, Math.hypot(dx, dy));
-                    const speed = phase2 ? 4.4 : 3.4;
-                    bossProjectiles.push({
-                        x: bx, y: by,
-                        vx: (dx / dist) * speed,
-                        vy: (dy / dist) * speed,
-                        r: 9
-                    });
+                    if (boss.name === 'duchess') {
+                        const kinds = ['fist', 'tail', 'head'];
+                        const kind = kinds[Math.floor(Math.random() * kinds.length)];
+                        if (kind === 'fist') {
+                            const fromL = Math.random() < 0.5;
+                            boss.limbs.push({
+                                kind: 'fist',
+                                x: fromL ? -90 : CANVAS_WIDTH + 20,
+                                y: 70 + Math.random() * 230,
+                                vx: fromL ? 7.2 : -7.2,
+                                vy: 0,
+                                w: 72, h: 52, life: 95, hurt: true
+                            });
+                        } else if (kind === 'tail') {
+                            boss.limbs.push({
+                                kind: 'tail',
+                                x: 180 + Math.random() * 340,
+                                y: CANVAS_HEIGHT + 20,
+                                vx: 0, vy: -8.5,
+                                w: 38, h: 150, life: 85, hurt: true
+                            });
+                        } else {
+                            boss.limbs.push({
+                                kind: 'head',
+                                x: boss.x + 40,
+                                y: boss.y + 90,
+                                vx: (dx / dist) * 5.2,
+                                vy: 5.5,
+                                w: 88, h: 68, life: 75, hurt: true
+                            });
+                        }
+                        boss.attackTimer = phase2 ? 42 : 68;
+                    } else {
+                        const speed = phase2 ? 4.4 : 3.4;
+                        bossProjectiles.push({
+                            x: bx, y: by,
+                            vx: (dx / dist) * speed,
+                            vy: (dy / dist) * speed,
+                            r: 9
+                        });
+                        boss.attackTimer = phase2 ? 55 : 85;
+                    }
                     sound.hitSound();
-                    boss.attackTimer = phase2 ? 55 : 85;
                 }
+                boss.limbs.forEach(lm => {
+                    lm.x += lm.vx;
+                    lm.y += lm.vy;
+                    lm.life--;
+                    if (lm.kind === 'head') lm.vy += 0.18;
+                    if (lm.hurt && player.x + player.w > lm.x && player.x < lm.x + lm.w &&
+                        player.y + player.h > lm.y && player.y < lm.y + lm.h) {
+                        takeDamage(1);
+                        lm.hurt = false;
+                    }
+                });
+                boss.limbs = boss.limbs.filter(lm => lm.life > 0 && lm.x > -160 && lm.x < CANVAS_WIDTH + 160 && lm.y > -180 && lm.y < CANVAS_HEIGHT + 180);
             }
 
             bossProjectiles.forEach(bp => {
@@ -2049,6 +2113,16 @@
             });
 
             if (player.invincibleTimer % 4 < 2) {
+                if (player.cloudMode) {
+                    const cx = Math.round(player.x + player.w / 2);
+                    const cy = Math.round(player.y + player.h + 8 + Math.sin(gameTime * 0.12) * 3);
+                    ctx.fillStyle = '#e0f2fe';
+                    ctx.fillRect(cx - 28, cy, 56, 16);
+                    ctx.fillStyle = '#bae6fd';
+                    ctx.fillRect(cx - 22, cy - 8, 44, 14);
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(cx - 16, cy - 4, 18, 8);
+                }
                 ctx.save();
                 ctx.translate(Math.round(player.x + player.w / 2), Math.round(player.y + player.h / 2 + 2));
                 ctx.scale(player.facing * player.scaleX, player.scaleY);
@@ -2322,6 +2396,92 @@
         function gameLoop() {
             update();
             render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
+();
+            requestAnimationFrame(gameLoop);
+        }
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
+(ctx, modalData.story, CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 20, 600, 32);
+                
+                if (Math.floor(gameTime / 30) % 2 === 0) {
+                    ctx.fillStyle = '#f43f5e';
+                    ctx.font = 'bold 32px monospace';
+                    ctx.fillText('PRESS SNEEZE TO CONTINUE', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 150);
+                }
+            }
+
+            ctx.restore();
+        }
+
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
+();
+            requestAnimationFrame(gameLoop);
+        }
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
+p() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
+();
+            requestAnimationFrame(gameLoop);
+        }
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
+(ctx, modalData.story, CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 20, 600, 32);
+                
+                if (Math.floor(gameTime / 30) % 2 === 0) {
+                    ctx.fillStyle = '#f43f5e';
+                    ctx.font = 'bold 32px monospace';
+                    ctx.fillText('PRESS SNEEZE TO CONTINUE', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 150);
+                }
+            }
+
+            ctx.restore();
+        }
+
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
+();
             requestAnimationFrame(gameLoop);
         }
 
