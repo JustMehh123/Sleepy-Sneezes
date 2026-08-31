@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SleepySneezes - 16-Bit Edition</title>
+    <title>Sleepy Sneezes 2</title>
     <style>
         html, body {
             margin: 0;
@@ -1022,6 +1022,25 @@
                     }
                 }
             });
+            if (boss && boss.limbs) {
+                const px = player.x + player.w / 2;
+                const py = player.y + player.h / 2;
+                boss.limbs.forEach(lm => {
+                    const cx = lm.x + lm.w / 2;
+                    const cy = lm.y + lm.h / 2;
+                    if (Math.hypot(px - cx, py - cy) < blastRadius) {
+                        const dmg = Math.floor(18 + chargeRatio * 28);
+                        boss.hp -= dmg;
+                        lm.life = 0;
+                        spawnFloatingText(cx, cy - 12, '-' + dmg, '#fda4af');
+                        spawnFeatherBurst(cx, cy, 8);
+                        if (boss.hp <= 0) {
+                            boss.hp = 0;
+                            levelComplete();
+                        }
+                    }
+                });
+            }
             player.chargeTimer = 0;
         }
 
@@ -1501,31 +1520,30 @@
                             const fromL = Math.random() < 0.5;
                             boss.limbs.push({
                                 kind: 'fist',
-                                x: fromL ? -90 : CANVAS_WIDTH + 20,
-                                y: 70 + Math.random() * 230,
-                                vx: fromL ? 7.2 : -7.2,
+                                x: fromL ? -20 : CANVAS_WIDTH - 70,
+                                y: 80 + Math.random() * 200,
+                                vx: fromL ? 5.2 : -5.2,
                                 vy: 0,
-                                w: 72, h: 52, life: 95, hurt: true
+                                w: 86, h: 64, life: 140, warn: 40, hurt: false
                             });
                         } else if (kind === 'tail') {
                             boss.limbs.push({
                                 kind: 'tail',
-                                x: 180 + Math.random() * 340,
-                                y: CANVAS_HEIGHT + 20,
-                                vx: 0, vy: -8.5,
-                                w: 38, h: 150, life: 85, hurt: true
+                                x: 160 + Math.random() * 360,
+                                y: CANVAS_HEIGHT - 40,
+                                vx: 0, vy: -6.2,
+                                w: 48, h: 170, life: 130, warn: 40, hurt: false
                             });
                         } else {
                             boss.limbs.push({
                                 kind: 'head',
-                                x: boss.x + 40,
-                                y: boss.y + 90,
-                                vx: (dx / dist) * 5.2,
-                                vy: 5.5,
-                                w: 88, h: 68, life: 75, hurt: true
+                                x: 280, y: 40,
+                                vx: (dx / dist) * 4.2,
+                                vy: 3.4,
+                                w: 110, h: 86, life: 120, warn: 40, hurt: false
                             });
                         }
-                        boss.attackTimer = phase2 ? 42 : 68;
+                        boss.attackTimer = phase2 ? 70 : 95;
                     } else {
                         const speed = phase2 ? 4.4 : 3.4;
                         bossProjectiles.push({
@@ -1539,10 +1557,15 @@
                     sound.hitSound();
                 }
                 boss.limbs.forEach(lm => {
-                    lm.x += lm.vx;
-                    lm.y += lm.vy;
+                    if (lm.warn > 0) {
+                        lm.warn--;
+                        if (lm.warn <= 0) lm.hurt = true;
+                    } else {
+                        lm.x += lm.vx;
+                        lm.y += lm.vy;
+                        if (lm.kind === 'head') lm.vy += 0.12;
+                    }
                     lm.life--;
-                    if (lm.kind === 'head') lm.vy += 0.18;
                     if (lm.hurt && player.x + player.w > lm.x && player.x < lm.x + lm.w &&
                         player.y + player.h > lm.y && player.y < lm.y + lm.h) {
                         takeDamage(1);
@@ -1903,76 +1926,118 @@
             });
 
             if (boss && boss.name === 'duchess') {
-                const bx = Math.round(boss.x);
-                const by = Math.round(boss.y);
-                const bounce = Math.round(Math.abs(Math.sin(gameTime * 0.12)) * -6);
-                ctx.fillStyle = '#f9a8d4';
-                ctx.fillRect(bx + 8, by + 20 + bounce, 74, 60);
-                ctx.fillStyle = '#fbcfe8';
-                ctx.fillRect(bx + 14, by + 26 + bounce, 62, 48);
+                const bx = Math.round(220 + Math.sin(gameTime * 0.03) * 18);
+                const by = Math.round(8 + Math.sin(gameTime * 0.05) * 8);
+                ctx.fillStyle = 'rgba(80, 20, 50, 0.45)';
+                ctx.fillRect(bx + 40, by + 210, 300, 24);
                 ctx.fillStyle = '#9d174d';
-                ctx.fillRect(bx + 18, by + 8 + bounce, 54, 22);
+                ctx.fillRect(bx + 30, by + 70, 280, 160);
+                ctx.fillStyle = '#f9a8d4';
+                ctx.fillRect(bx + 50, by + 86, 240, 130);
+                ctx.fillStyle = '#fbcfe8';
+                ctx.fillRect(bx + 80, by + 100, 180, 90);
+                ctx.fillStyle = '#be185d';
+                ctx.fillRect(bx + 70, by + 8, 200, 80);
                 ctx.fillStyle = '#f472b6';
-                ctx.fillRect(bx + 28, by + 0 + bounce, 34, 14);
+                ctx.fillRect(bx + 110, by - 10, 120, 48);
                 ctx.fillStyle = '#fde68a';
-                ctx.fillRect(bx + 40, by + 4 + bounce, 10, 6);
-                ctx.fillStyle = '#1c1917';
-                ctx.fillRect(bx + 28, by + 40 + bounce, 8, 8);
-                ctx.fillRect(bx + 52, by + 40 + bounce, 8, 8);
+                ctx.fillRect(bx + 152, by + 4, 36, 16);
+                ctx.fillStyle = '#4c0519';
+                ctx.fillRect(bx + 100, by + 118, 36, 36);
+                ctx.fillRect(bx + 200, by + 118, 36, 36);
                 ctx.fillStyle = '#fff';
-                ctx.fillRect(bx + 30, by + 42 + bounce, 3, 3);
-                ctx.fillRect(bx + 54, by + 42 + bounce, 3, 3);
+                ctx.fillRect(bx + 110, by + 128, 14, 14);
+                ctx.fillRect(bx + 210, by + 128, 14, 14);
                 ctx.fillStyle = '#9f1239';
-                ctx.fillRect(bx + 38, by + 56 + bounce, 14, 6);
-                ctx.fillStyle = '#0f172a';
-                ctx.fillRect(200, 12, 400, 18);
+                ctx.fillRect(bx + 140, by + 168, 56, 18);
+                ctx.fillStyle = '#831843';
+                ctx.fillRect(bx + 8, by + 150, 50, 70);
+                ctx.fillRect(bx + 282, by + 150, 50, 70);
                 ctx.fillStyle = '#f472b6';
-                ctx.fillRect(202, 14, Math.max(0, (boss.hp / boss.maxHp) * 396), 14);
+                ctx.fillRect(bx + 18, by + 200, 40, 28);
+                ctx.fillRect(bx + 282, by + 200, 40, 28);
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(180, 8, 440, 22);
+                ctx.fillStyle = '#f472b6';
+                ctx.fillRect(182, 10, Math.max(0, (boss.hp / boss.maxHp) * 436), 18);
                 ctx.fillStyle = '#fdf2f8';
                 ctx.font = 'bold 14px monospace';
                 ctx.textAlign = 'center';
-                ctx.fillText('DUCHESS  PHASE ' + boss.phase + '/2', 400, 26);
+                ctx.fillText('DUCHESS OF DANDER  PHASE ' + boss.phase + '/2', 400, 24);
             } else if (boss) {
                 const bx = Math.round(boss.x + Math.sin(gameTime * 0.05) * 22);
                 const by = Math.round(boss.y);
                 const floatY = Math.round(Math.sin(gameTime * 0.1) * 6);
                 const ph = boss.phase || 1;
-                const body = ph === 1 ? '#2e1065' : ph === 2 ? '#7f1d1d' : '#111827';
-                const trim = ph === 1 ? '#4c1d95' : ph === 2 ? '#b91c1c' : '#f43f5e';
-                ctx.fillStyle = '#fbbf24';
-                ctx.fillRect(bx + 20, by - 20 + floatY, 60, 20);
-                ctx.fillRect(bx + 10, by - 30 + floatY, 20, 20);
-                ctx.fillRect(bx + 40, by - 40 + floatY, 20, 28);
-                ctx.fillRect(bx + 70, by - 30 + floatY, 20, 20);
-                ctx.fillStyle = ph === 3 ? '#22d3ee' : '#f43f5e';
-                ctx.fillRect(bx + 46, by - 28 + floatY, 8, 8);
-                ctx.fillStyle = body;
-                ctx.fillRect(bx, by + floatY, 100, 74);
-                ctx.fillStyle = trim;
-                ctx.fillRect(bx - 12, by + 8 + floatY, 12, 58);
-                ctx.fillRect(bx + 100, by + 8 + floatY, 12, 58);
-                if (ph >= 2) {
-                    ctx.fillStyle = '#f97316';
-                    ctx.fillRect(bx - 18, by + 20 + floatY, 8, 40);
-                    ctx.fillRect(bx + 110, by + 20 + floatY, 8, 40);
-                }
                 const wisp1 = Math.round(Math.sin(gameTime * 0.15) * 8);
-                ctx.fillStyle = body;
-                ctx.fillRect(bx + 10, by + 74 + floatY + wisp1, 20, 16);
-                ctx.fillRect(bx + 40, by + 74 + floatY - wisp1, 20, 24);
-                ctx.fillRect(bx + 70, by + 74 + floatY + wisp1, 20, 16);
-                ctx.fillStyle = '#0f172a';
-                ctx.fillRect(bx + 18, by + 14 + floatY, 64, 42);
-                const angryX = Math.round(Math.cos(gameTime*0.2)*4);
-                ctx.fillStyle = ph === 3 ? '#22d3ee' : '#f43f5e';
-                ctx.fillRect(bx + 26 + angryX, by + 24 + floatY, 18, 14);
-                ctx.fillRect(bx + 56 + angryX, by + 24 + floatY, 18, 14);
-                ctx.fillStyle = '#fef08a';
-                ctx.fillRect(bx + 32 + angryX, by + 28 + floatY, 6, 6);
-                ctx.fillRect(bx + 62 + angryX, by + 28 + floatY, 6, 6);
-                if (ph === 3) {
+                const angryX = Math.round(Math.cos(gameTime * 0.2) * 4);
+                if (ph === 1) {
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.fillRect(bx + 20, by - 18 + floatY, 60, 18);
+                    ctx.fillRect(bx + 12, by - 28 + floatY, 16, 16);
+                    ctx.fillRect(bx + 42, by - 36 + floatY, 16, 22);
+                    ctx.fillRect(bx + 72, by - 28 + floatY, 16, 16);
+                    ctx.fillStyle = '#2e1065';
+                    ctx.fillRect(bx, by + floatY, 100, 74);
+                    ctx.fillStyle = '#4c1d95';
+                    ctx.fillRect(bx - 10, by + 10 + floatY, 10, 50);
+                    ctx.fillRect(bx + 100, by + 10 + floatY, 10, 50);
+                    ctx.fillStyle = '#2e1065';
+                    ctx.fillRect(bx + 10, by + 74 + floatY + wisp1, 20, 16);
+                    ctx.fillRect(bx + 40, by + 74 + floatY - wisp1, 20, 24);
+                    ctx.fillRect(bx + 70, by + 74 + floatY + wisp1, 20, 16);
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillRect(bx + 18, by + 14 + floatY, 64, 42);
                     ctx.fillStyle = '#f43f5e';
-                    ctx.fillRect(bx + 36, by + 44 + floatY, 28, 6);
+                    ctx.fillRect(bx + 26 + angryX, by + 24 + floatY, 18, 14);
+                    ctx.fillRect(bx + 56 + angryX, by + 24 + floatY, 18, 14);
+                    ctx.fillStyle = '#fef08a';
+                    ctx.fillRect(bx + 32 + angryX, by + 28 + floatY, 6, 6);
+                    ctx.fillRect(bx + 62 + angryX, by + 28 + floatY, 6, 6);
+                } else if (ph === 2) {
+                    ctx.fillStyle = '#7f1d1d';
+                    ctx.fillRect(bx - 8, by - 8 + floatY, 116, 90);
+                    ctx.fillStyle = '#f97316';
+                    ctx.fillRect(bx + 8, by - 28 + floatY, 20, 28);
+                    ctx.fillRect(bx + 72, by - 28 + floatY, 20, 28);
+                    ctx.fillStyle = '#450a0a';
+                    ctx.fillRect(bx + 16, by + 10 + floatY, 68, 50);
+                    ctx.fillStyle = '#fecaca';
+                    ctx.fillRect(bx + 24, by + 16 + floatY, 52, 38);
+                    ctx.fillStyle = '#f97316';
+                    ctx.fillRect(bx + 30 + angryX, by + 24 + floatY, 14, 18);
+                    ctx.fillRect(bx + 56 + angryX, by + 24 + floatY, 14, 18);
+                    ctx.fillStyle = '#7f1d1d';
+                    ctx.fillRect(bx + 38, by + 48 + floatY, 24, 8);
+                    ctx.fillStyle = '#fb923c';
+                    ctx.fillRect(bx - 22, by + 20 + floatY, 16, 44);
+                    ctx.fillRect(bx + 106, by + 20 + floatY, 16, 44);
+                    ctx.fillStyle = '#fde047';
+                    ctx.fillRect(bx + 12, by + 78 + floatY + wisp1, 18, 22);
+                    ctx.fillRect(bx + 42, by + 82 + floatY, 16, 18);
+                    ctx.fillRect(bx + 70, by + 78 + floatY - wisp1, 18, 22);
+                } else {
+                    ctx.fillStyle = '#020617';
+                    ctx.fillRect(bx - 24, by - 20 + floatY, 148, 110);
+                    ctx.fillStyle = '#22d3ee';
+                    ctx.fillRect(bx - 8, by - 48 + floatY, 12, 40);
+                    ctx.fillRect(bx + 96, by - 48 + floatY, 12, 40);
+                    ctx.fillRect(bx + 40, by - 56 + floatY, 20, 46);
+                    ctx.fillStyle = '#111827';
+                    ctx.fillRect(bx, by + floatY, 100, 70);
+                    ctx.fillStyle = '#22d3ee';
+                    ctx.fillRect(bx + 18, by + 16 + floatY, 22, 22);
+                    ctx.fillRect(bx + 60, by + 16 + floatY, 22, 22);
+                    ctx.fillStyle = '#ecfeff';
+                    ctx.fillRect(bx + 24 + angryX, by + 22 + floatY, 10, 10);
+                    ctx.fillRect(bx + 66 + angryX, by + 22 + floatY, 10, 10);
+                    ctx.fillStyle = '#f43f5e';
+                    ctx.fillRect(bx + 30, by + 48 + floatY, 40, 10);
+                    ctx.fillStyle = '#0ea5e9';
+                    ctx.fillRect(bx - 28, by + 24 + floatY + wisp1, 18, 50);
+                    ctx.fillRect(bx + 110, by + 24 + floatY - wisp1, 18, 50);
+                    ctx.fillStyle = '#67e8f9';
+                    ctx.fillRect(bx + 8, by + 78 + floatY, 84, 10);
                 }
                 ctx.fillStyle = '#0f172a';
                 ctx.fillRect(200, 12, 400, 22);
@@ -1982,7 +2047,8 @@
                 ctx.fillStyle = '#f8fafc';
                 ctx.font = 'bold 14px monospace';
                 ctx.textAlign = 'center';
-                ctx.fillText('KING  PHASE ' + ph + '/3', 400, 28);
+                const kingName = ph === 1 ? 'NIGHTMARE KING' : ph === 2 ? 'BURNING CROWN' : 'VOID KING';
+                ctx.fillText(kingName + '  PHASE ' + ph + '/3', 400, 28);
             }
 
             if (goalPost) {
@@ -2267,6 +2333,58 @@
                 ctx.fillRect(bX + bSize - 1, bY + bSize - 1, 1, 1);
 
                 ctx.restore();
+            }
+
+            if (boss && boss.limbs) {
+                boss.limbs.forEach(lm => {
+                    const lx = Math.round(lm.x);
+                    const ly = Math.round(lm.y);
+                    const flash = lm.warn > 0 && Math.floor(gameTime / 4) % 2 === 0;
+                    if (lm.kind === 'fist') {
+                        ctx.fillStyle = flash ? '#ffffff' : '#fb7185';
+                        ctx.fillRect(lx - 4, ly - 4, lm.w + 8, lm.h + 8);
+                        ctx.fillStyle = '#9d174d';
+                        ctx.fillRect(lx, ly, lm.w, lm.h);
+                        ctx.fillStyle = '#f9a8d4';
+                        ctx.fillRect(lx + 10, ly + 10, lm.w - 20, lm.h - 20);
+                        ctx.fillStyle = '#fde68a';
+                        ctx.fillRect(lx + 22, ly + 18, 18, 18);
+                        ctx.fillStyle = '#fff';
+                        ctx.font = 'bold 16px monospace';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(lm.warn > 0 ? 'FIST!' : 'FIST', lx + lm.w / 2, ly + lm.h / 2 + 5);
+                    } else if (lm.kind === 'tail') {
+                        ctx.fillStyle = flash ? '#ffffff' : '#f43f5e';
+                        ctx.fillRect(lx - 6, ly - 6, lm.w + 12, lm.h + 12);
+                        ctx.fillStyle = '#be185d';
+                        ctx.fillRect(lx, ly, lm.w, lm.h);
+                        ctx.fillStyle = '#f9a8d4';
+                        ctx.fillRect(lx + 10, ly + 8, 12, lm.h - 16);
+                        ctx.fillStyle = '#fff';
+                        ctx.font = 'bold 14px monospace';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('TAIL', lx + lm.w / 2, ly + 24);
+                    } else {
+                        ctx.fillStyle = flash ? '#ffffff' : '#f472b6';
+                        ctx.fillRect(lx - 4, ly - 4, lm.w + 8, lm.h + 8);
+                        ctx.fillStyle = '#9d174d';
+                        ctx.fillRect(lx, ly, lm.w, lm.h);
+                        ctx.fillStyle = '#fbcfe8';
+                        ctx.fillRect(lx + 12, ly + 12, lm.w - 24, lm.h - 28);
+                        ctx.fillStyle = '#1c1917';
+                        ctx.fillRect(lx + 22, ly + 22, 18, 18);
+                        ctx.fillRect(lx + 64, ly + 22, 18, 18);
+                        ctx.fillStyle = '#fff';
+                        ctx.fillRect(lx + 26, ly + 26, 8, 8);
+                        ctx.fillRect(lx + 68, ly + 26, 8, 8);
+                        ctx.fillStyle = '#9f1239';
+                        ctx.fillRect(lx + 36, ly + 54, 38, 12);
+                        ctx.fillStyle = '#fff';
+                        ctx.font = 'bold 16px monospace';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(lm.warn > 0 ? 'HEAD!' : 'HEAD', lx + lm.w / 2, ly + lm.h - 8);
+                    }
+                });
             }
 
             shockwaves.forEach(sw => {
