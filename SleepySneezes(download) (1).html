@@ -1543,21 +1543,24 @@
             if (currentGameState === STATE.START) {
                 ctx.fillStyle = '#030611';
                 ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-                ctx.fillStyle = '#38bdf8';
-                ctx.font = 'bold 64px monospace';
+                ctx.fillStyle = '#a5b4fc';
+                ctx.font = 'bold 48px monospace';
                 ctx.textAlign = 'center';
-                ctx.fillText('SleepySneezes', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 - 40);
-                
-                ctx.fillStyle = '#f1f5f9';
-                ctx.font = '24px monospace';
-                ctx.fillText('WASD/Arrows: Move & Jump', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 10);
-                ctx.fillText('SNEEZE (Shift/E): Charge & Blast!', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 42);
-                ctx.fillText('DASH (F / Ctrl): Any direction except straight down', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 74);
-                
+                ctx.fillText('SLEEPY SNEEZES 2', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 - 70);
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '18px monospace';
+                ctx.fillText('WASD move   SHIFT sneeze   F dash', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 - 24);
+                ctx.fillText('LEFT / RIGHT  choose difficulty', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 4);
+                ctx.fillStyle = diffIndex === 2 ? '#f43f5e' : diffIndex === 0 ? '#86efac' : '#fde047';
+                ctx.font = 'bold 36px monospace';
+                ctx.fillText('<  ' + DIFFS[diffIndex].name + '  >', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 52);
+                ctx.fillStyle = '#64748b';
+                ctx.font = '14px monospace';
+                ctx.fillText(diffIndex === 0 ? '5 HP  ·  slower foes' : diffIndex === 2 ? '2 HP  ·  furious bosses' : '3 HP  ·  classic nap', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 80);
                 if (Math.floor(gameTime / 30) % 2 === 0) {
-                    ctx.fillStyle = '#f43f5e';
-                    ctx.font = 'bold 32px monospace';
-                    ctx.fillText('PRESS SNEEZE TO START', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 130);
+                    ctx.fillStyle = '#818cf8';
+                    ctx.font = 'bold 28px monospace';
+                    ctx.fillText('PRESS SNEEZE TO START', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 140);
                 }
                 ctx.restore();
                 return;
