@@ -2140,82 +2140,64 @@
                     ctx.fillRect(-auraSize, -auraSize - 8, auraSize * 2, auraSize * 2);
                 }
 
-                // legs + slippers (skinny)
-                const legY = glide ? 12 : 10;
+                // legs + slippers
+                const legY = glide ? 13 : 11;
                 ctx.fillStyle = '#f8fafc';
-                ctx.fillRect(-7 + walk, legY, 5, glide ? 6 : 10);
-                ctx.fillRect(2 - walk, legY, 5, glide ? 6 : 10);
+                ctx.fillRect(-6 + walk, legY, 5, glide ? 7 : 11);
+                ctx.fillRect(1 - walk, legY, 5, glide ? 7 : 11);
                 ctx.fillStyle = '#312e81';
-                ctx.fillRect(-7 + walk, legY + (glide ? 5 : 9), 6, 4);
-                ctx.fillRect(1 - walk, legY + (glide ? 5 : 9), 6, 4);
+                ctx.fillRect(-7 + walk, legY + (glide ? 6 : 10), 7, 4);
+                ctx.fillRect(0 - walk, legY + (glide ? 6 : 10), 7, 4);
                 ctx.fillStyle = '#a5b4fc';
-                ctx.fillRect(-7 + walk, legY + (glide ? 5 : 9), 6, 1);
-                ctx.fillRect(1 - walk, legY + (glide ? 5 : 9), 6, 1);
+                ctx.fillRect(-7 + walk, legY + (glide ? 6 : 10), 7, 1);
+                ctx.fillRect(0 - walk, legY + (glide ? 6 : 10), 7, 1);
 
-                // robe — slim, or puffed parachute while gliding
+                // humanoid torso / robe
                 if (glide) {
                     ctx.fillStyle = '#3730a3';
-                    ctx.fillRect(-20, 2, 40, 8);
+                    ctx.fillRect(-18, 1, 36, 10);
                     ctx.fillStyle = '#4f46e5';
-                    ctx.fillRect(-22, 8, 44, 6);
+                    ctx.fillRect(-20, 8, 40, 7);
                     ctx.fillStyle = '#818cf8';
-                    ctx.fillRect(-18, -2, 36, 6);
-                    ctx.fillStyle = '#c4b5fd';
-                    ctx.fillRect(-16, 10, 8, 4);
-                    ctx.fillRect(8, 10, 8, 4);
+                    ctx.fillRect(-16, -3, 32, 6);
                     ctx.fillStyle = '#fde68a';
-                    ctx.fillRect(-6, 2, 5, 5);
+                    ctx.fillRect(-5, 1, 5, 5);
                 } else {
+                    ctx.fillStyle = '#4338ca';
+                    ctx.fillRect(-8, -6, 16, 6);
                     ctx.fillStyle = '#4f46e5';
-                    ctx.fillRect(-11, -2, 22, 17);
+                    ctx.fillRect(-10, -2, 20, 16);
                     ctx.fillStyle = '#818cf8';
-                    ctx.fillRect(-11, -2, 22, 4);
+                    ctx.fillRect(-10, -2, 20, 4);
                     ctx.fillStyle = '#3730a3';
-                    ctx.fillRect(-11, 12, 22, 3);
+                    ctx.fillRect(-10, 12, 20, 3);
                     ctx.fillStyle = '#fde68a';
-                    ctx.fillRect(-6, 2, 5, 5);
-                    ctx.fillRect(-5, 1, 3, 7);
-                    ctx.fillRect(-7, 3, 7, 3);
+                    ctx.fillRect(-5, 2, 5, 5);
+                    ctx.fillRect(-4, 1, 3, 7);
+                    ctx.fillRect(-6, 3, 7, 3);
                     ctx.fillStyle = '#e0e7ff';
                     ctx.fillRect(4, 6, 2, 2);
                     ctx.fillStyle = '#c4b5fd';
-                    ctx.fillRect(-11, 8, 22, 2);
-                    ctx.fillStyle = '#fef9c3';
-                    ctx.fillRect(-1, 8, 3, 2);
+                    ctx.fillRect(-10, 8, 20, 2);
                 }
 
-                // arms swing opposite the legs
-                ctx.fillStyle = '#4f46e5';
-                ctx.fillStyle = '#f8fafc';
-                if (player.isCharging) {
-                    ctx.fillStyle = '#4f46e5';
-                    ctx.fillRect(6, -2, 5, 10);
-                    ctx.fillRect(-12, -2, 5, 10);
-                    ctx.fillStyle = '#f8fafc';
-                    ctx.fillRect(7, 7, 4, 4);
-                    ctx.fillRect(-12, 7, 4, 4);
-                } else if (player.isDashing) {
-                    ctx.fillStyle = '#4f46e5';
-                    ctx.fillRect(8, 0, 12, 4);
-                    ctx.fillRect(-14, 2, 8, 4);
-                    ctx.fillStyle = '#f8fafc';
-                    ctx.fillRect(18, 0, 4, 4);
-                    ctx.fillRect(-16, 2, 4, 4);
-                } else if (glide) {
-                    ctx.fillStyle = '#4f46e5';
-                    ctx.fillRect(10, -4, 10, 4);
-                    ctx.fillRect(-20, -4, 10, 4);
-                    ctx.fillStyle = '#f8fafc';
-                    ctx.fillRect(18, -5, 4, 4);
-                    ctx.fillRect(-22, -5, 4, 4);
-                } else {
-                    ctx.fillStyle = '#4f46e5';
-                    ctx.fillRect(7, 1 - armSwing, 5, 8);
-                    ctx.fillRect(-13, 1 + armSwing, 5, 8);
-                    ctx.fillStyle = '#f8fafc';
-                    ctx.fillRect(8, 8 - armSwing, 4, 4);
-                    ctx.fillRect(-13, 8 + armSwing, 4, 4);
-                }
+                // floating circular hands (no stick arms)
+                let hxR = 13, hyR = 4 - armSwing;
+                let hxL = -20, hyL = 4 + armSwing;
+                if (player.isCharging) { hxR = 12; hyR = -8; hxL = -19; hyL = -8; }
+                else if (player.isDashing) { hxR = 18; hyR = 1; hxL = -22; hyL = 3; }
+                else if (glide) { hxR = 16; hyR = -6; hxL = -23; hyL = -6; }
+                const drawHand = (hx, hy) => {
+                    ctx.fillStyle = '#e2e8f0';
+                    ctx.fillRect(hx + 1, hy, 7, 8);
+                    ctx.fillRect(hx, hy + 1, 9, 6);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(hx + 2, hy + 1, 5, 5);
+                    ctx.fillStyle = '#cbd5e1';
+                    ctx.fillRect(hx + 6, hy + 5, 2, 2);
+                };
+                drawHand(hxL, hyL);
+                drawHand(hxR, hyR);
 
                 // head — smaller, white
                 ctx.fillStyle = '#cbd5e1';
@@ -2396,92 +2378,6 @@
         function gameLoop() {
             update();
             render();
-            requestAnimationFrame(gameLoop);
-        }
-
-        requestAnimationFrame(gameLoop);
-    </script>
-</body>
-</html>
-();
-            requestAnimationFrame(gameLoop);
-        }
-
-        requestAnimationFrame(gameLoop);
-    </script>
-</body>
-</html>
-(ctx, modalData.story, CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 20, 600, 32);
-                
-                if (Math.floor(gameTime / 30) % 2 === 0) {
-                    ctx.fillStyle = '#f43f5e';
-                    ctx.font = 'bold 32px monospace';
-                    ctx.fillText('PRESS SNEEZE TO CONTINUE', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 150);
-                }
-            }
-
-            ctx.restore();
-        }
-
-        function gameLoop() {
-            update();
-            render();
-            requestAnimationFrame(gameLoop);
-        }
-
-        requestAnimationFrame(gameLoop);
-    </script>
-</body>
-</html>
-();
-            requestAnimationFrame(gameLoop);
-        }
-
-        requestAnimationFrame(gameLoop);
-    </script>
-</body>
-</html>
-p() {
-            update();
-            render();
-            requestAnimationFrame(gameLoop);
-        }
-
-        requestAnimationFrame(gameLoop);
-    </script>
-</body>
-</html>
-();
-            requestAnimationFrame(gameLoop);
-        }
-
-        requestAnimationFrame(gameLoop);
-    </script>
-</body>
-</html>
-(ctx, modalData.story, CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 20, 600, 32);
-                
-                if (Math.floor(gameTime / 30) % 2 === 0) {
-                    ctx.fillStyle = '#f43f5e';
-                    ctx.font = 'bold 32px monospace';
-                    ctx.fillText('PRESS SNEEZE TO CONTINUE', CANVAS_WIDTH/2, CANVAS_HEIGHT/2 + 150);
-                }
-            }
-
-            ctx.restore();
-        }
-
-        function gameLoop() {
-            update();
-            render();
-            requestAnimationFrame(gameLoop);
-        }
-
-        requestAnimationFrame(gameLoop);
-    </script>
-</body>
-</html>
-();
             requestAnimationFrame(gameLoop);
         }
 
